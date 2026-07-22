@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Framelab click harness</title>
+  <style>
+    :root {
+      --bg: #0c0c0e; --surface: #111114; --border: #2a2a35;
+      --text: #e8e8f0; --text2: #8888a0; --accent: #6e56cf; --green: #3dd68c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; height: 100vh; background: var(--bg); color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      display: grid; grid-template-columns: 1fr 420px;
+    }
+    #stage {
+      position: relative; background: #fff;
+      border-right: 1px solid var(--border); overflow: hidden;
+    }
+    #stage iframe { width: 100%; height: 100%; border: 0; display: block; }
+    aside { display: flex; flex-direction: column; height: 100vh; }
+    header {
+      padding: 14px 18px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px;
+    }
+    header strong { font-weight: 600; }
+    .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--text2); }
+    .dot.live { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .controls { padding: 12px 18px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; }
+    .controls input {
+      flex: 1; min-width: 0; padding: 6px 10px; border-radius: 6px;
+      background: var(--surface); color: var(--text); border: 1px solid var(--border);
+      font: 12px ui-monospace, "Geist Mono", Menlo, monospace;
+    }
+    .controls button {
+      padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text); cursor: pointer;
+      font: 12px ui-sans-serif;
+    }
+    .controls button:hover { border-color: var(--accent); }
+    #log {
+      flex: 1; overflow: auto; padding: 8px 4px;
+      font: 12px ui-monospace, "Geist Mono", Menlo, monospace;
+    }
+    .row { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+    .row .t { color: var(--text2); font-size: 11px; }
+    .row .id { word-break: break-all; color: var(--text); margin-top: 4px; }
+    .row .id b { color: var(--accent); }
+    .row .rect { color: var(--text2); font-size: 11px; margin-top: 4px; }
+    .empty { padding: 24px; color: var(--text2); text-align: center; }
+  </style>
+</head>
+<body>
+  <main id="stage"></main>
+  <aside>
+    <header>
+      <span class="dot" id="dot"></span>
+      <strong>framelab click harness</strong>
+    </header>
+    <div class="controls">
+      <input id="src" value="http://localhost:3134" spellcheck="false" />
+      <button id="load">Load</button>
+      <button id="clear">Clear log</button>
+    </div>
+    <div id="log"><div class="empty">Click anything in the iframe.</div></div>
+  </aside>
+
+  <script>
+    const stage = document.getElementById('stage');
+    const log = document.getElementById('log');
+    const dot = document.getElementById('dot');
+    const srcInput = document.getElementById('src');
+
+    let count = 0;
+
+    function load(url) {
+      stage.innerHTML = '';
+      const f = document.createElement('iframe');
+      f.src = url;
+      f.onload = () => dot.classList.add('live');
+      stage.appendChild(f);
+    }
+
+    function render(data) {
+      if (count === 0) log.innerHTML = '';
+      count++;
+      const row = document.createElement('div');
+      row.className = 'row';
+      const t = new Date().toLocaleTimeString();
+      const [tag, file, line, ch] = (data.framelabId || '').split('|');
+      const r = data.rect || {};
+      row.innerHTML =
+        `<div class="t">#${count} · ${t} · ${data.type}</div>` +
+        `<div class="id"><b>&lt;${tag}&gt;</b> at ${file}:${line}:${ch}</div>` +
+        `<div class="rect">rect ${Math.round(r.left)},${Math.round(r.top)} ` +
+        `${Math.round(r.width)}×${Math.round(r.height)}</div>`;
+      log.prepend(row);
+    }
+
+    window.addEventListener('message', (event) => {
+      const data = event.data || {};
+      if (data.type === 'FRAMELAB_CLICK' || data.type === 'FRAMELAB_HOVER') {
+        render(data);
+      }
+    });
+
+    document.getElementById('load').onclick = () => load(srcInput.value);
+    document.getElementById('clear').onclick = () => {
+      count = 0;
+      log.innerHTML = '<div class="empty">Cleared.</div>';
+    };
+
+    load(srcInput.value);
+  </script>
+</body>
+</html>

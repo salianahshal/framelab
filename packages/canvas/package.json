@@ -1,0 +1,22 @@
+{
+  "name": "@framelab/canvas",
+  "version": "0.1.0",
+  "description": "Framelab canvas UI — static files served by @framelab/server.",
+  "license": "MIT",
+  "author": "salianahshal2 <salianahshal21@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/salianahshal/framelab.git",
+    "directory": "packages/canvas"
+  },
+  "homepage": "https://github.com/salianahshal/framelab#readme",
+  "bugs": "https://github.com/salianahshal/framelab/issues",
+  "files": [
+    "index.html",
+    "logo-dark-bg.svg",
+    "logo-light-bg.svg"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

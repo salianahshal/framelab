@@ -1,0 +1,39 @@
+{
+  "name": "@framelab/babel-plugin",
+  "version": "0.1.0",
+  "description": "Babel plugin that tags JSX elements with data-framelab-id for the Framelab canvas.",
+  "license": "MIT",
+  "author": "salianahshal2 <salianahshal21@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/salianahshal/framelab.git",
+    "directory": "packages/babel-plugin"
+  },
+  "homepage": "https://github.com/salianahshal/framelab#readme",
+  "bugs": "https://github.com/salianahshal/framelab/issues",
+  "main": "src/index.js",
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node test/run.js"
+  },
+  "peerDependencies": {
+    "@babel/core": "^7.0.0"
+  },
+  "dependencies": {
+    "@babel/helper-plugin-utils": "^7.22.5",
+    "@babel/parser": "^7.24.7"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/preset-react": "^7.24.0",
+    "@babel/preset-typescript": "^7.24.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "framelab-monorepo",
+  "private": true,
+  "workspaces": [
+    "packages/babel-plugin",
+    "packages/canvas",
+    "packages/server",
+    "packages/cli"
+  ],
+  "scripts": {
+    "test": "npm test --workspace @framelab/babel-plugin --workspace @framelab/server",
+    "publish-all": "npm publish --workspace @framelab/babel-plugin --workspace @framelab/canvas --workspace @framelab/server --workspace framelab"
+  }
+}

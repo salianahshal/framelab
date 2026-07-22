@@ -1,0 +1,2601 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>framelab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" />
+  <style>
+    :root, [data-theme="dark"] {
+      --bg: #0c0c0e;
+      --surface: #111114;
+      --surface2: #18181d;
+      --surface3: #1f1f26;
+      --border: #2a2a35;
+      --border2: #3a3a48;
+      --text: #e8e8f0;
+      --text2: #8888a0;
+      --text3: #55556a;
+      --accent: #6e56cf;
+      --accent2: #8b72e8;
+      --accent-soft: rgba(110, 86, 207, 0.15);
+      --green: #3dd68c;
+      --yellow: #f5c542;
+      --red: #ef4444;
+      --diff-add-bg: rgba(61, 214, 140, 0.10);
+      --diff-add-fg: #87f0b8;
+      --diff-del-bg: rgba(239, 68, 68, 0.10);
+      --diff-del-fg: #ff8a8a;
+      --shadow-strong: 0 12px 36px rgba(0,0,0,0.5);
+      --tsx: #3b82f6;
+      --jsx: #f59e0b;
+    }
+    [data-theme="light"] {
+      --bg: #fafafa;
+      --surface: #ffffff;
+      --surface2: #f4f4f5;
+      --surface3: #ececef;
+      --border: #e4e4e7;
+      --border2: #d4d4d8;
+      --text: #18181b;
+      --text2: #52525b;
+      --text3: #a1a1aa;
+      --accent: #6e56cf;
+      --accent2: #7c5fdc;
+      --accent-soft: rgba(110, 86, 207, 0.10);
+      --green: #16a34a;
+      --yellow: #ca8a04;
+      --red: #dc2626;
+      --diff-add-bg: rgba(34, 197, 94, 0.10);
+      --diff-add-fg: #15803d;
+      --diff-del-bg: rgba(239, 68, 68, 0.07);
+      --diff-del-fg: #b91c1c;
+      --shadow-strong: 0 4px 24px rgba(0,0,0,0.08);
+      --tsx: #2563eb;
+      --jsx: #d97706;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: Geist, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      font-size: 13px;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: 44px 1fr;
+    }
+    .mono { font-family: "Geist Mono", ui-monospace, Menlo, monospace; }
+
+    /* Toolbar */
+    .toolbar {
+      display: flex; align-items: center; gap: 14px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      user-select: none;
+    }
+    .brand img { height: 20px; display: none; }
+    [data-theme="dark"] .brand .logo-dark { display: block; }
+    [data-theme="light"] .brand .logo-light { display: block; }
+    .status {
+      display: flex; align-items: center; gap: 6px;
+      color: var(--text3); font-size: 11px;
+      margin-top: auto;
+      padding: 12px 14px;
+      border-top: 1px solid var(--border);
+    }
+    .dot {
+      width: 6px; height: 6px; border-radius: 999px;
+      background: var(--text3); transition: background 0.2s, box-shadow 0.2s;
+      flex-shrink: 0;
+    }
+    .dot.connecting { background: var(--yellow); box-shadow: 0 0 5px var(--yellow); animation: pulse-dot 1.4s ease-in-out infinite; }
+    .dot.connected { background: var(--green); box-shadow: 0 0 5px color-mix(in srgb, var(--green) 60%, transparent); }
+    .dot.syncing { background: var(--yellow); box-shadow: 0 0 5px var(--yellow); animation: pulse-dot 1.4s ease-in-out infinite; }
+    .dot.disconnected { background: var(--red); }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .status-text { letter-spacing: 0.01em; }
+    .current-file {
+      margin-left: auto;
+      font: 11.5px "Geist Mono", ui-monospace, Menlo, monospace;
+      color: var(--text3);
+      max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      direction: rtl; text-align: right;
+      letter-spacing: -0.01em;
+    }
+
+    /* Layout */
+    .layout {
+      --left-width: 230px;
+      --right-width: 280px;
+      display: grid;
+      grid-template-columns: var(--left-width) 1fr var(--right-width);
+      height: 100%; min-height: 0;
+    }
+    body.is-resizing { cursor: col-resize !important; user-select: none; }
+    body.is-resizing * { cursor: col-resize !important; }
+    body.is-resizing iframe { pointer-events: none; }
+    aside.left, aside.right {
+      background: var(--surface);
+      overflow: auto;
+      display: flex; flex-direction: column;
+    }
+    aside.left { border-right: 1px solid var(--border); }
+    aside.right { border-left: 1px solid var(--border); overflow: hidden; }
+    .right-tabs { flex-shrink: 0; }
+    #pane-inspector.active { flex: 1; overflow-y: auto; }
+    #pane-diff { overflow: hidden; flex-direction: column; }
+    #pane-diff.active { display: flex; flex: 1; }
+    #diff-list { flex: 1; overflow-y: auto; min-height: 0; }
+    .panel-section { border-bottom: 1px solid var(--border); }
+    .panel-section h3 {
+      margin: 0; padding: 14px 14px 5px;
+      font-size: 9.5px; letter-spacing: 0.09em;
+      color: var(--text3); text-transform: uppercase; font-weight: 600;
+    }
+    .list { display: flex; flex-direction: column; padding-bottom: 6px; }
+    .list-empty { padding: 12px 14px; color: var(--text3); font-size: 12px; }
+    .list-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 14px;
+      font: 12px "Geist Mono", ui-monospace, Menlo, monospace;
+      color: var(--text); cursor: pointer;
+      border-left: 2px solid transparent;
+      white-space: nowrap; overflow: hidden;
+    }
+    .list-item:hover { background: var(--surface2); }
+    .list-item.active {
+      background: var(--accent-soft); border-left-color: var(--accent);
+    }
+    .list-item .kind { color: var(--text3); }
+    .list-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+    .list-item .meta { color: var(--text3); font-size: 10px; }
+
+    /* Stage */
+    .stage {
+      position: relative;
+      background-color: var(--bg);
+      background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
+      background-size: 22px 22px;
+      padding: 24px;
+      overflow: auto;
+      display: flex; flex-direction: column; min-height: 0;
+    }
+    .iframe-shell {
+      position: relative; flex: 1;
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: var(--shadow-strong);
+    }
+    .iframe-shell iframe {
+      width: 100%; height: 100%; border: 0; display: block;
+    }
+    .overlay {
+      position: absolute; pointer-events: none;
+      border: 2px solid var(--accent);
+      box-shadow: 0 0 0 1px rgba(110,86,207,0.25);
+      border-radius: 2px;
+      display: none;
+      z-index: 10;
+      transition: all 0.08s ease-out;
+    }
+    .overlay.hover {
+      border-width: 1px; z-index: 9; opacity: 0.7;
+    }
+    .overlay.show { display: block; }
+    .drop-indicator {
+      position: absolute;
+      height: 3px;
+      background: var(--accent2);
+      border-radius: 2px;
+      box-shadow: 0 0 10px rgba(139, 114, 232, 0.6);
+      pointer-events: none;
+      z-index: 12;
+      display: none;
+      transition: top 0.06s linear, left 0.06s linear, width 0.06s linear;
+    }
+    .drop-indicator.show { display: block; }
+    .drop-indicator::before, .drop-indicator::after {
+      content: '';
+      position: absolute;
+      top: -3px; width: 9px; height: 9px;
+      border-radius: 999px; background: var(--accent2);
+    }
+    .drop-indicator::before { left: -4px; }
+    .drop-indicator::after { right: -4px; }
+    .stage.dragging .iframe-shell { box-shadow: 0 0 0 2px var(--accent), 0 12px 36px rgba(0,0,0,0.5); }
+    .stage-empty {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text3); font-size: 12px; pointer-events: none;
+    }
+
+    /* Confirm modal */
+    .modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45);
+      backdrop-filter: blur(3px);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.15s;
+    }
+    .modal-backdrop.show { opacity: 1; pointer-events: all; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 10px;
+      padding: 20px 20px 16px;
+      width: 292px;
+      box-shadow: var(--shadow-strong);
+      transform: scale(0.96) translateY(-4px);
+      transition: transform 0.15s;
+    }
+    .modal-backdrop.show .modal { transform: scale(1) translateY(0); }
+    .modal-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: rgba(239, 68, 68, 0.12);
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 12px;
+      color: var(--red);
+    }
+    .modal-title { font: 600 13px Geist; color: var(--text); margin-bottom: 5px; }
+    .modal-desc { font: 12px Geist; color: var(--text2); line-height: 1.55; }
+    .modal-desc code {
+      font: 11px "Geist Mono", ui-monospace, Menlo, monospace;
+      color: var(--text); background: var(--surface3);
+      padding: 1px 5px; border-radius: 3px;
+    }
+    .modal-actions {
+      display: flex; gap: 7px; margin-top: 18px; justify-content: flex-end;
+    }
+    .modal-actions button {
+      padding: 6px 14px;
+      border-radius: 5px;
+      font: 500 12px Geist;
+      cursor: pointer;
+      border: 1px solid var(--border2);
+      background: var(--surface2);
+      color: var(--text2);
+      transition: background 0.1s, color 0.1s, border-color 0.1s;
+    }
+    .modal-actions button:hover { background: var(--surface3); color: var(--text); }
+    .modal-actions .modal-danger {
+      background: var(--red);
+      border-color: var(--red);
+      color: white;
+    }
+    .modal-actions .modal-danger:hover { opacity: 0.88; }
+
+    /* Right column tabs */
+    .right-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: sticky; top: 0; z-index: 4;
+      padding: 0 6px;
+      gap: 2px;
+    }
+    .right-tabs button {
+      flex: 1;
+      background: transparent;
+      color: var(--text3);
+      border: 0;
+      padding: 10px 6px;
+      font: 12px Geist;
+      font-weight: 500;
+      cursor: pointer;
+      border-bottom: 1.5px solid transparent;
+      display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+      transition: color 0.12s;
+    }
+    .right-tabs button:hover { color: var(--text2); }
+    .right-tabs button.active {
+      color: var(--text);
+      border-bottom-color: var(--accent);
+    }
+    .right-tabs .badge {
+      font: 10px "Geist Mono", ui-monospace, Menlo, monospace;
+      letter-spacing: 0;
+      padding: 1px 5px;
+      border-radius: 999px;
+      background: var(--accent);
+      color: white;
+      min-width: 16px; text-align: center;
+    }
+    .right-tabs .badge.zero {
+      background: var(--surface3);
+      color: var(--text3);
+    }
+
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* Diff panel */
+    .diff-empty {
+      padding: 36px 18px; color: var(--text3); font-size: 12px; text-align: center; line-height: 1.7;
+    }
+    /* Diff footer — GitHub Desktop style sticky commit area */
+    .diff-footer {
+      flex-shrink: 0;
+      border-top: 1px solid var(--border);
+      padding: 10px 14px 12px;
+      background: var(--surface);
+      display: flex; flex-direction: column; gap: 7px;
+    }
+    .diff-footer-meta {
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .diff-footer-meta .footer-label {
+      font-size: 11px; font-weight: 500; color: var(--text2);
+    }
+    .diff-footer-meta-actions {
+      display: flex; align-items: center; gap: 2px;
+    }
+    .diff-footer textarea {
+      width: 100%; height: 50px;
+      padding: 6px 9px;
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid transparent;
+      border-radius: 5px;
+      font: 12px Geist, ui-sans-serif, system-ui;
+      outline: none; resize: none;
+      transition: border-color 0.12s;
+    }
+    .diff-footer textarea::placeholder { color: var(--text3); }
+    .diff-footer textarea:hover { border-color: var(--border); }
+    .diff-footer textarea:focus { border-color: var(--accent); }
+    .diff-footer textarea:disabled { opacity: 0.4; cursor: not-allowed; }
+    .commit-cta {
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--accent);
+      color: white;
+      border: 0;
+      border-radius: 6px;
+      font: 500 12px Geist;
+      cursor: pointer;
+      transition: background 0.12s, opacity 0.12s;
+    }
+    .commit-cta:hover:not(:disabled) { background: var(--accent2); }
+    .commit-cta:disabled { opacity: 0.35; cursor: not-allowed; }
+    .discard-link {
+      background: transparent; border: 0;
+      color: var(--text3);
+      font: 11px Geist;
+      cursor: pointer; padding: 1px 0;
+      text-align: center; width: 100%;
+      transition: color 0.12s;
+    }
+    .discard-link:hover:not(:disabled) { color: var(--red); }
+    .discard-link:disabled { opacity: 0.3; cursor: not-allowed; }
+    /* Auto-commit toggle (small, in footer) */
+    .auto-commit-toggle {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: transparent; border: 0;
+      color: var(--text3); font: 11px Geist;
+      cursor: pointer; padding: 3px 6px;
+      border-radius: 4px;
+      transition: color 0.12s, background 0.12s;
+    }
+    .auto-commit-toggle:hover { color: var(--text2); background: var(--surface2); }
+    .auto-commit-toggle.on { color: var(--text); }
+    .auto-commit-toggle .pill {
+      width: 20px; height: 11px; border-radius: 999px;
+      background: var(--surface3);
+      position: relative; flex-shrink: 0;
+      transition: background 0.15s;
+    }
+    .auto-commit-toggle .pill::after {
+      content: '';
+      position: absolute; top: 1px; left: 1px;
+      width: 9px; height: 9px;
+      border-radius: 999px;
+      background: var(--text3);
+      transition: transform 0.15s, background 0.15s;
+    }
+    .auto-commit-toggle.on .pill { background: var(--accent); }
+    .auto-commit-toggle.on .pill::after { transform: translateX(9px); background: white; }
+
+    /* Session log entries */
+    .session-empty {
+      padding: 32px 18px; color: var(--text2); font-size: 12px;
+      text-align: center; line-height: 1.6;
+    }
+    .session-list { display: flex; flex-direction: column; }
+    .session-entry {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .session-entry:hover { background: var(--surface); }
+    .session-entry .row1 {
+      display: flex; align-items: baseline; gap: 8px;
+      font-size: 11px;
+    }
+    .session-entry .time {
+      color: var(--text3);
+      font: 10px "Geist Mono", ui-monospace, Menlo, monospace;
+      flex-shrink: 0;
+    }
+    .session-entry .sha {
+      font: 10px "Geist Mono", ui-monospace, Menlo, monospace;
+      color: var(--accent2);
+      flex-shrink: 0;
+      margin-left: auto;
+    }
+    .session-entry .msg {
+      font: 12px "Geist Mono", ui-monospace, Menlo, monospace;
+      color: var(--text);
+      word-break: break-word;
+      line-height: 1.45;
+    }
+    .session-entry .kind {
+      display: inline-block;
+      font-size: 9px; letter-spacing: 0.06em;
+      padding: 1px 5px; border-radius: 3px;
+      background: var(--surface3); color: var(--text2);
+      text-transform: uppercase; font-weight: 600;
+      margin-right: 4px;
+    }
+    .session-entry .kind.style { background: rgba(110, 86, 207, 0.15); color: var(--accent2); }
+    .session-entry .kind.text { background: rgba(245, 197, 66, 0.15); color: var(--yellow); }
+    .session-entry .kind.move { background: rgba(61, 214, 140, 0.15); color: var(--green); }
+    .session-entry .kind.revert { background: rgba(239, 68, 68, 0.15); color: var(--red); }
+
+
+    .diff-file {
+      border-bottom: 1px solid var(--border);
+    }
+    .diff-file-head {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 14px;
+      background: var(--surface);
+      cursor: pointer;
+      user-select: none;
+    }
+    .diff-file-head:hover { background: var(--surface2); }
+    .diff-file-head .chev {
+      color: var(--text3); font-size: 9px; width: 8px;
+      transition: transform 0.12s;
+    }
+    .diff-file-head.collapsed .chev { transform: rotate(-90deg); }
+    .diff-file-head .path {
+      flex: 1; min-width: 0;
+      font: 12px "Geist Mono", ui-monospace, Menlo, monospace;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      direction: rtl; text-align: left;
+    }
+    .diff-file-head .stat {
+      font: 11px "Geist Mono", ui-monospace, Menlo, monospace;
+      color: var(--text3);
+    }
+    .diff-file-head .stat .add { color: var(--green); }
+    .diff-file-head .stat .del { color: var(--red); }
+    .diff-file-head .revert-btn {
+      font: 10px Geist;
+      background: transparent;
+      color: var(--text3);
+      border: 1px solid var(--border);
+      padding: 1px 6px;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    .diff-file-head .revert-btn:hover { border-color: var(--accent); color: var(--accent2); }
+    .diff-file-body {
+      font: 11px "Geist Mono", ui-monospace, Menlo, monospace;
+      background: var(--bg);
+      overflow-x: auto;
+    }
+    .diff-file-body.collapsed { display: none; }
+    .diff-line {
+      padding: 1px 14px;
+      white-space: pre;
+      min-height: 16px;
+    }
+    .diff-line.add {
+      background: var(--diff-add-bg);
+      color: var(--diff-add-fg);
+    }
+    .diff-line.del {
+      background: var(--diff-del-bg);
+      color: var(--diff-del-fg);
+    }
+    .diff-line.hunk {
+      color: var(--text3);
+      background: var(--surface);
+      padding: 3px 14px;
+      font-size: 10px;
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 8px;
+    }
+    .diff-line.hunk .hunk-text {
+      flex: 1; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .hunk-revert-btn {
+      flex-shrink: 0;
+      font: 10px Geist;
+      background: transparent;
+      color: var(--text3);
+      border: 1px solid var(--border);
+      padding: 1px 6px;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    .hunk-revert-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent2);
+    }
+    .diff-line.context { color: var(--text2); }
+
+    /* Inspector */
+    .inspector-empty {
+      padding: 36px 18px; color: var(--text3); font-size: 12px; text-align: center; line-height: 1.7;
+    }
+    .inspector-head {
+      padding: 12px 14px 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .inspector-head .tag {
+      font: 500 12px Geist; color: var(--text);
+    }
+    .inspector-head .meta {
+      font: 10.5px "Geist Mono", ui-monospace, Menlo, monospace;
+      color: var(--text3); margin-top: 1px;
+    }
+    .section {
+      border-bottom: 1px solid var(--border);
+      padding: 9px 14px 11px;
+    }
+    .section h4 {
+      margin: 0 0 8px;
+      font-size: 11px; letter-spacing: 0;
+      color: var(--text2); font-weight: 500;
+    }
+    .row {
+      display: flex; align-items: center; gap: 6px;
+      margin-bottom: 5px;
+    }
+    .row:last-child { margin-bottom: 0; }
+    .row label {
+      flex: 0 0 44px;
+      font-size: 10.5px;
+      color: var(--text3);
+      text-align: left;
+    }
+    .row input[type="text"], .row input[type="number"], .row select {
+      flex: 1; min-width: 0;
+      padding: 4px 7px;
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid transparent;
+      border-radius: 4px;
+      font: 11.5px "Geist Mono", ui-monospace, Menlo, monospace;
+      outline: none;
+      transition: border-color 0.12s, background 0.12s;
+    }
+    .row input[type="text"]:hover, .row input[type="number"]:hover, .row select:hover {
+      border-color: var(--border);
+    }
+    .row select { padding: 3px 7px; cursor: pointer; }
+    .row input:focus, .row select:focus {
+      border-color: var(--accent); background: var(--surface3);
+    }
+    .row input[type="range"] {
+      flex: 1; accent-color: var(--accent); height: 16px;
+    }
+    .row .value-display {
+      font: 11px "Geist Mono", ui-monospace, Menlo, monospace;
+      color: var(--text3); width: 28px; text-align: right;
+    }
+
+    .grid-4 {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 5px;
+    }
+    .grid-4 input { font-size: 11px !important; padding: 4px 6px !important; }
+    .grid-4 input::placeholder { color: var(--text3); font-size: 10px; }
+
+    .toggle-group {
+      display: flex; flex: 1;
+      background: var(--surface2);
+      border-radius: 5px;
+      padding: 2px; gap: 1px;
+    }
+    .toggle-group button {
+      flex: 1;
+      background: transparent; color: var(--text3);
+      border: 0;
+      padding: 4px 6px;
+      font: 11px "Geist Mono", ui-monospace, Menlo, monospace;
+      cursor: pointer;
+      border-radius: 3px;
+      transition: color 0.1s, background 0.1s;
+    }
+    .toggle-group button:hover { color: var(--text2); background: var(--surface3); }
+    .toggle-group button.active {
+      background: var(--surface3); color: var(--text);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.18);
+    }
+
+    .color-input-group {
+      display: flex; flex: 1; min-width: 0;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      overflow: hidden;
+      background: var(--surface2);
+      transition: border-color 0.12s;
+    }
+    .color-input-group:hover { border-color: var(--border); }
+    .color-input-group:focus-within { border-color: var(--accent); }
+    .color-pick {
+      width: 28px; height: 24px;
+      border: 0; padding: 0; cursor: pointer;
+      background: transparent;
+      border-right: 1px solid var(--border);
+      flex: 0 0 28px;
+    }
+    .color-pick::-webkit-color-swatch-wrapper { padding: 3px; }
+    .color-pick::-webkit-color-swatch { border: 0; border-radius: 2px; }
+    .color-pick::-moz-color-swatch { border: 0; border-radius: 2px; }
+    .color-input-group input.color-text {
+      flex: 1; min-width: 0;
+      border: 0 !important;
+      background: transparent !important;
+      border-radius: 0 !important;
+      padding: 3px 7px !important;
+    }
+    .color-input-group input.color-text:focus {
+      background: transparent !important;
+    }
+
+    .bare-msg {
+      padding: 18px; color: var(--text2); font-size: 12px; line-height: 1.5;
+    }
+    .bare-msg b { color: var(--text); }
+
+    .text-content {
+      padding: 10px 14px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .text-content .label {
+      font-size: 11px; color: var(--text2);
+      font-weight: 500; margin-bottom: 5px;
+      display: flex; align-items: center; gap: 7px;
+    }
+    .text-content .label .badge {
+      font-size: 9px; letter-spacing: 0; padding: 1px 5px;
+      border-radius: 999px; background: var(--surface3);
+      color: var(--text3); font-weight: 500;
+    }
+    .text-content textarea {
+      width: 100%;
+      min-height: 34px; max-height: 180px;
+      padding: 6px 8px;
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid transparent;
+      border-radius: 4px;
+      font: 12px Geist, ui-sans-serif, system-ui;
+      outline: none; resize: vertical;
+      transition: border-color 0.12s;
+    }
+    .text-content textarea:hover { border-color: var(--border); }
+    .text-content textarea:focus { border-color: var(--accent); background: var(--surface3); }
+    .text-content textarea[disabled] {
+      color: var(--text3); background: var(--surface);
+      cursor: not-allowed;
+    }
+    .text-content .hint {
+      font-size: 10px; color: var(--text3); margin-top: 3px;
+    }
+
+    .raw-classname {
+      padding: 8px 14px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .raw-classname .label {
+      font-size: 10.5px; color: var(--text3);
+      font-weight: 500; margin-bottom: 4px;
+    }
+    .raw-classname .value {
+      font: 10.5px "Geist Mono", ui-monospace, Menlo, monospace;
+      color: var(--text2);
+      background: var(--surface2);
+      border: 1px solid transparent;
+      border-radius: 4px;
+      padding: 5px 8px;
+      word-break: break-all;
+      cursor: text;
+      user-select: text;
+      max-height: 72px;
+      overflow: auto;
+      line-height: 1.55;
+      transition: border-color 0.12s;
+    }
+    .raw-classname .value:hover { border-color: var(--border); }
+    .raw-classname .value:empty::before {
+      content: '(no className)';
+      color: var(--text3);
+    }
+    .copy-hint {
+      font-size: 10px; color: var(--text3);
+      margin-top: 3px; text-align: right;
+      cursor: pointer; user-select: none;
+    }
+    .copy-hint:hover { color: var(--text2); }
+    .copy-hint.flash { color: var(--green); }
+
+    /* Toolbar icon buttons (theme + panel toggles) */
+    .icon-btn {
+      background: transparent;
+      border: 0;
+      padding: 0;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text3);
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px;
+      transition: color 0.12s, background 0.12s;
+    }
+    .icon-btn:hover {
+      color: var(--text);
+      background: var(--surface3);
+    }
+    .icon-btn.active {
+      color: var(--text);
+      background: var(--surface3);
+    }
+    .icon-btn svg { display: block; }
+    .theme-toggle { border-radius: 999px; }
+    .toolbar .toolbar-actions {
+      display: inline-flex; gap: 2px; align-items: center;
+    }
+
+    /* Panel collapse layout */
+    .layout.left-collapsed { grid-template-columns: 1fr var(--right-width); }
+    .layout.right-collapsed { grid-template-columns: var(--left-width) 1fr; }
+    .layout.left-collapsed.right-collapsed { grid-template-columns: 1fr; }
+    .layout.left-collapsed > aside.left,
+    .layout.right-collapsed > aside.right { display: none; }
+
+    /* Resize handle (right panel) */
+    aside.right { position: relative; }
+    .resize-handle {
+      position: absolute;
+      top: 0; bottom: 0; left: -3px;
+      width: 6px;
+      cursor: col-resize;
+      z-index: 5;
+      background: transparent;
+      transition: background 0.15s;
+    }
+    .resize-handle::after {
+      content: '';
+      position: absolute;
+      top: 0; bottom: 0; left: 2px;
+      width: 1px;
+      background: transparent;
+      transition: background 0.15s, width 0.12s;
+    }
+    .resize-handle:hover::after,
+    .resize-handle.dragging::after {
+      background: var(--accent);
+      width: 2px;
+    }
+    .resize-handle.dragging::after {
+      box-shadow: 0 0 8px rgba(110, 86, 207, 0.5);
+    }
+    .layout.right-collapsed .resize-handle { display: none; }
+
+    /* Hierarchical file tree */
+    .tree { padding: 2px 0 6px; }
+    .tree-node {
+      display: flex; align-items: center; gap: 5px;
+      padding: 3px 10px 3px 0;
+      font: 12px Geist;
+      color: var(--text);
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+      overflow: hidden;
+      border-left: 2px solid transparent;
+    }
+    .tree-node:hover { background: var(--surface2); }
+    .tree-node.active {
+      background: var(--accent-soft);
+      border-left-color: var(--accent);
+    }
+    .tree-node .chev {
+      width: 10px; flex-shrink: 0;
+      color: var(--text3);
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: transform 0.12s;
+    }
+    .tree-node.expanded .chev { transform: rotate(90deg); }
+    .tree-node.leaf .chev { visibility: hidden; }
+    .tree-node .icon {
+      flex-shrink: 0; width: 14px; height: 14px;
+      display: inline-flex; align-items: center; justify-content: center;
+      color: var(--text2);
+    }
+    .tree-node .icon.tsx { color: var(--tsx); }
+    .tree-node .icon.jsx { color: var(--jsx); }
+    .tree-node .icon.folder { color: var(--text3); }
+    .tree-node.active .icon { color: inherit; }
+    .tree-node .name {
+      flex: 1; overflow: hidden; text-overflow: ellipsis;
+      font-family: "Geist Mono", ui-monospace, Menlo, monospace;
+      font-size: 11.5px;
+    }
+
+    /* Collapsible inspector sections */
+    .section h4 {
+      cursor: pointer; user-select: none;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .section h4 .section-chev {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 10px; height: 10px;
+      color: var(--text3);
+      transition: transform 0.12s;
+    }
+    .section.collapsed h4 { margin-bottom: 0; }
+    .section.collapsed h4 .section-chev { transform: rotate(-90deg); }
+    .section.collapsed .section-body { display: none; }
+
+    /* Scrollbar */
+    *::-webkit-scrollbar { width: 5px; height: 5px; }
+    *::-webkit-scrollbar-track { background: transparent; }
+    *::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+    *::-webkit-scrollbar-thumb:hover { background: var(--border2); }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <div class="brand">
+      <img class="logo-dark" src="logo-dark-bg.svg" alt="Framelab">
+      <img class="logo-light" src="logo-light-bg.svg" alt="Framelab">
+    </div>
+    <div class="current-file mono" id="current-file"></div>
+    <div class="toolbar-actions">
+      <button class="icon-btn" id="left-toggle" data-panel="left" aria-label="Toggle file tree"></button>
+      <button class="icon-btn" id="right-toggle" data-panel="right" aria-label="Toggle inspector"></button>
+      <button class="icon-btn theme-toggle" id="theme-toggle" aria-label="Toggle theme"></button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="left">
+      <section class="panel-section">
+        <h3>Files</h3>
+        <div id="file-tree" class="list"></div>
+      </section>
+      <section class="panel-section">
+        <h3>Elements</h3>
+        <div id="element-list" class="list"></div>
+      </section>
+      <div class="status" id="status">
+        <span class="dot connecting"></span>
+        <span class="status-text">connecting</span>
+      </div>
+    </aside>
+
+    <section class="stage">
+      <div class="iframe-shell" id="iframe-shell">
+        <iframe id="app-iframe" src="about:blank"></iframe>
+        <div class="overlay" id="select-overlay"></div>
+        <div class="drop-indicator" id="drop-indicator"></div>
+      </div>
+    </section>
+
+    <aside class="right" id="right-column">
+      <div class="resize-handle" id="resize-right" title="drag to resize, double-click to reset"></div>
+      <div class="right-tabs">
+        <button id="tab-inspector" class="active" data-tab="inspector">Inspector</button>
+        <button id="tab-diff" data-tab="diff">
+          Diff <span class="badge zero" id="diff-badge">0</span>
+        </button>
+      </div>
+      <div class="tab-pane active" id="pane-inspector">
+        <div class="inspector-empty" id="inspector-empty">
+          Click any element in the iframe to inspect.<br/><br/>
+          <span style="color: var(--text3); font-size: 11px;">
+            Or pick a file from the left to load.
+          </span>
+        </div>
+        <div id="inspector"></div>
+      </div>
+      <div class="tab-pane" id="pane-diff">
+        <div id="diff-list">
+          <div class="diff-empty" id="diff-empty">No pending changes.<br/><br/>
+            <span style="color: var(--text3); font-size: 11px;">
+              Edit a Tailwind class or text on the canvas to see your diff appear here.
+            </span>
+          </div>
+        </div>
+        <div class="diff-footer">
+          <div class="diff-footer-meta">
+            <span class="footer-label">Commit changes</span>
+            <div class="diff-footer-meta-actions">
+              <button id="auto-commit-toggle" class="auto-commit-toggle" title="Auto-commit each edit">
+                <span class="pill"></span>
+                <span>Auto</span>
+              </button>
+              <button id="diff-refresh-btn" class="icon-btn" title="Refresh diff" style="width:26px;height:26px;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              </button>
+            </div>
+          </div>
+          <textarea id="commit-message" spellcheck="false" placeholder="Summary (required)"></textarea>
+          <button id="diff-commit-btn" class="commit-cta" disabled>Commit to branch</button>
+          <button id="diff-discard-btn" class="discard-link" disabled>Discard all changes</button>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    // ---------- Config ----------
+    const QS = new URLSearchParams(location.search);
+    const SERVER_URL = QS.get('server') || `${location.protocol}//${location.hostname}:3131`;
+    const APP_URL = QS.get('app') || 'http://localhost:3134';
+    const WS_URL = SERVER_URL.replace(/^http/, 'ws');
+
+    // ---------- Inline icons ----------
+    const ICONS = {
+      chev:       '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>',
+      chevDown:   '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
+      folder:     '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z" opacity="0.85"/></svg>',
+      folderOpen: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 20H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1H8l-3 9h17l-1.39 4.17A2 2 0 0 1 19 20z" opacity="0.85"/></svg>',
+      file:       '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/></svg>',
+      sun:        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>',
+      moon:       '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',
+      panelLeft:  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>',
+      panelRight: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg>',
+    };
+
+    const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
+    const MOD = IS_MAC ? '⌘' : 'Ctrl';
+
+    // ---------- UI prefs (theme, collapsed sections, folder expand) ----------
+    const UI = {
+      theme: 'dark',
+      collapsedSections: new Set(),
+      collapsedFolders: new Set(),
+      panels: { left: true, right: true },
+      rightWidth: 280,
+      autoCommit: false,
+    };
+    const RIGHT_MIN = 240;
+    const RIGHT_MAX = 600;
+    const RIGHT_DEFAULT = 280;
+    function loadUiPrefs() {
+      try {
+        UI.theme = localStorage.getItem('cf-theme') || 'dark';
+        UI.collapsedSections = new Set(JSON.parse(localStorage.getItem('cf-collapsed-sections') || '[]'));
+        UI.collapsedFolders = new Set(JSON.parse(localStorage.getItem('cf-collapsed-folders') || '[]'));
+        const p = JSON.parse(localStorage.getItem('cf-panels') || 'null');
+        if (p) UI.panels = { left: p.left !== false, right: p.right !== false };
+        const w = parseInt(localStorage.getItem('cf-right-width') || '', 10);
+        UI.rightWidth = (w >= RIGHT_MIN && w <= RIGHT_MAX) ? w : RIGHT_DEFAULT;
+        UI.autoCommit = localStorage.getItem('cf-auto-commit') === 'true';
+      } catch {}
+    }
+    function saveUiPrefs() {
+      try {
+        localStorage.setItem('cf-theme', UI.theme);
+        localStorage.setItem('cf-collapsed-sections', JSON.stringify([...UI.collapsedSections]));
+        localStorage.setItem('cf-collapsed-folders', JSON.stringify([...UI.collapsedFolders]));
+        localStorage.setItem('cf-panels', JSON.stringify(UI.panels));
+        localStorage.setItem('cf-right-width', String(UI.rightWidth));
+        localStorage.setItem('cf-auto-commit', String(UI.autoCommit));
+      } catch {}
+    }
+    function applyRightWidth(width) {
+      UI.rightWidth = Math.max(RIGHT_MIN, Math.min(RIGHT_MAX, width));
+      const layout = document.querySelector('.layout');
+      if (layout) layout.style.setProperty('--right-width', UI.rightWidth + 'px');
+    }
+    function setupRightResize() {
+      const handle = document.getElementById('resize-right');
+      if (!handle) return;
+      let dragging = false;
+      let startX = 0;
+      let startWidth = 0;
+
+      handle.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        dragging = true;
+        startX = e.clientX;
+        startWidth = UI.rightWidth;
+        handle.classList.add('dragging');
+        document.body.classList.add('is-resizing');
+        e.preventDefault();
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        // dragging the handle LEFT (smaller clientX) widens the right panel
+        const dx = startX - e.clientX;
+        applyRightWidth(startWidth + dx);
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false;
+        handle.classList.remove('dragging');
+        document.body.classList.remove('is-resizing');
+        saveUiPrefs();
+      });
+
+      // Double-click to reset to default
+      handle.addEventListener('dblclick', () => {
+        applyRightWidth(RIGHT_DEFAULT);
+        saveUiPrefs();
+      });
+    }
+    function setPanel(side, visible) {
+      UI.panels[side] = visible;
+      const layout = document.querySelector('.layout');
+      layout.classList.toggle(`${side}-collapsed`, !visible);
+      const btn = document.getElementById(`${side}-toggle`);
+      if (btn) {
+        btn.classList.toggle('active', visible);
+        const shortcut = side === 'left' ? `${MOD}+B` : `${MOD}+J`;
+        const what = side === 'left' ? 'file tree' : 'inspector';
+        btn.title = `${visible ? 'Hide' : 'Show'} ${what} (${shortcut})`;
+      }
+      saveUiPrefs();
+    }
+    function togglePanel(side) {
+      setPanel(side, !UI.panels[side]);
+    }
+    function setUiTheme(theme) {
+      UI.theme = theme;
+      document.documentElement.dataset.theme = theme;
+      const btn = document.getElementById('theme-toggle');
+      if (btn) btn.innerHTML = theme === 'dark' ? ICONS.sun : ICONS.moon;
+      saveUiPrefs();
+    }
+    function toggleUiTheme() {
+      setUiTheme(UI.theme === 'dark' ? 'light' : 'dark');
+    }
+
+    // ---------- State ----------
+    const state = {
+      ws: null,
+      reconnectTimer: null,
+      files: [],
+      currentFilePath: null,
+      snapshot: null,
+      selectedKey: null,
+      selectedElement: null,
+      selectedRect: null,
+      selectedComputed: null,
+      pendingProps: {},
+      debounceTimer: null,
+      lastUpdateAt: 0,
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    // ---------- Status ----------
+    const STATUS_LABELS = {
+      connecting: 'connecting',
+      connected: 'connected',
+      syncing: 'syncing',
+      disconnected: 'disconnected',
+    };
+    function setStatus(s) {
+      const el = $('status');
+      const dot = el.querySelector('.dot');
+      const text = el.querySelector('.status-text');
+      dot.className = 'dot ' + s;
+      el.className = 'status ' + s;
+      text.textContent = STATUS_LABELS[s] || s;
+    }
+
+    // ---------- WebSocket ----------
+    function connectWS() {
+      setStatus('connecting');
+      try {
+        const ws = new WebSocket(WS_URL);
+        state.ws = ws;
+        ws.addEventListener('open', () => setStatus('connected'));
+        ws.addEventListener('close', () => {
+          setStatus('disconnected');
+          clearTimeout(state.reconnectTimer);
+          state.reconnectTimer = setTimeout(connectWS, 1500);
+        });
+        ws.addEventListener('error', () => {});
+        ws.addEventListener('message', onWsMessage);
+      } catch (e) {
+        setStatus('disconnected');
+        state.reconnectTimer = setTimeout(connectWS, 1500);
+      }
+    }
+
+    function onWsMessage(e) {
+      let msg;
+      try { msg = JSON.parse(e.data); } catch { return; }
+      if (msg.type === 'DIFF_SYNC') {
+        renderDiff(msg.diff);
+        return;
+      }
+      if (msg.type === 'THEME_SYNC') {
+        applyTheme(msg.theme);
+        if (state.selectedElement) renderInspector();
+        return;
+      }
+      if (msg.type === 'DISCARD_ALL') {
+        // file content changed back to HEAD; force a full refresh
+        if (state.currentFilePath) loadFile(state.currentFilePath);
+        reloadIframe();
+        return;
+      }
+      if (msg.type === 'FILE_SYNC') {
+        const snap = msg.snapshot;
+        if (state.currentFilePath && snap.filePath === state.currentFilePath) {
+          state.snapshot = snap;
+          renderElementList();
+          if (state.selectedKey) {
+            const next = findBySelectionKey(state.selectedKey, snap.elements);
+            if (next) {
+              state.selectedElement = next;
+              const textArea = $('text-content-input');
+              const isTyping = textArea && document.activeElement === textArea;
+              if (isTyping) {
+                // user is mid-edit — only refresh non-text bits
+                refreshInspectorClassName(next);
+              } else {
+                renderInspector();
+              }
+            }
+          }
+          if (msg.source === 'update') flashStatus('connected');
+        }
+      }
+    }
+
+    function refreshInspectorClassName(el) {
+      const raw = $('raw-classname-value');
+      if (raw) raw.textContent = el.className || '';
+    }
+
+    function flashStatus(after) {
+      setStatus('syncing');
+      setTimeout(() => setStatus(after), 250);
+    }
+
+    // ---------- REST ----------
+    async function api(method, path, body) {
+      const res = await fetch(`${SERVER_URL}${path}`, {
+        method,
+        headers: body ? { 'content-type': 'application/json' } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (!res.ok) throw new Error(`${method} ${path} → ${res.status}`);
+      return res.json();
+    }
+
+    async function fetchFiles() {
+      try {
+        const data = await api('GET', '/files');
+        state.files = data.files || [];
+        state.rootDir = data.rootDir || '';
+        renderFileTree();
+      } catch (e) {
+        console.warn('fetchFiles failed', e);
+      }
+    }
+
+    async function fetchTheme() {
+      try {
+        const data = await api('GET', '/theme');
+        applyTheme(data);
+      } catch (e) {
+        console.warn('fetchTheme failed', e);
+      }
+    }
+
+    function applyTheme(payload) {
+      if (!payload || !payload.tokens) {
+        COLOR_HEX = Object.fromEntries(DEFAULT_PRESETS.map((c) => [c.name, c.value]));
+        TOKENS = {
+          spacing: { all: DEFAULT_TOKENS.spacing, custom: [], defaults: DEFAULT_TOKENS.spacing },
+          fontSize: { all: DEFAULT_TOKENS.fontSize, custom: [], defaults: DEFAULT_TOKENS.fontSize },
+          borderRadius: { all: DEFAULT_TOKENS.borderRadius, custom: [], defaults: DEFAULT_TOKENS.borderRadius },
+          boxShadow: { all: DEFAULT_TOKENS.boxShadow, custom: [], defaults: DEFAULT_TOKENS.boxShadow },
+          fontWeight: { all: DEFAULT_TOKENS.fontWeight, custom: [], defaults: DEFAULT_TOKENS.fontWeight },
+        };
+        return;
+      }
+      const t = payload.tokens;
+      const colors = t.colors || {};
+      COLOR_HEX = Object.fromEntries(
+        [...DEFAULT_PRESETS, ...(colors.all || [])].map((c) => [c.name, c.value])
+      );
+
+      // For each scale: prefer the project's own keys (so users only see the
+      // tokens they actually have), but fall back to the Tailwind defaults
+      // when the user didn't override anything.
+      function pick(category) {
+        const v = t[category];
+        if (!v || !v.all || !v.all.length) {
+          return { all: DEFAULT_TOKENS[category], custom: [], defaults: DEFAULT_TOKENS[category] };
+        }
+        return v;
+      }
+      TOKENS = {
+        spacing: pick('spacing'),
+        fontSize: pick('fontSize'),
+        borderRadius: pick('borderRadius'),
+        boxShadow: pick('boxShadow'),
+        fontWeight: pick('fontWeight'),
+      };
+    }
+
+    async function loadFile(filePath) {
+      state.currentFilePath = filePath;
+      $('current-file').textContent = filePath;
+      try {
+        await api('POST', '/watch', { filePath });
+        const snap = await api(
+          'GET',
+          `/snapshot?filePath=${encodeURIComponent(filePath)}`
+        );
+        state.snapshot = snap;
+        renderFileTree();
+        renderElementList();
+      } catch (e) {
+        console.error('loadFile failed', e);
+      }
+    }
+
+    async function pushUpdate(payload) {
+      if (!state.selectedElement) return;
+      try {
+        await api('POST', '/update', {
+          filePath: state.currentFilePath,
+          elementId: state.selectedElement.framelabId,
+          ...payload,
+        });
+      } catch (e) {
+        console.error('update failed', e);
+      }
+    }
+
+    // ---------- Rendering: file tree ----------
+    function relPath(p) {
+      const root = state.rootDir || '';
+      if (root && p.startsWith(root)) return p.slice(root.length).replace(/^\/+/, '');
+      const parts = p.split('/');
+      return parts.slice(-2).join('/');
+    }
+    function basename(p) {
+      const parts = p.split('/');
+      return parts[parts.length - 1];
+    }
+
+    function buildFileTree(files, rootDir) {
+      const root = { name: '', children: {}, isFile: false, fullPath: '' };
+      for (const f of files) {
+        let rel = f;
+        if (rootDir && f.startsWith(rootDir)) {
+          rel = f.slice(rootDir.length).replace(/^[/\\]+/, '');
+        }
+        const parts = rel.split(/[/\\]/).filter(Boolean);
+        let cur = root;
+        let pathSoFar = '';
+        for (let i = 0; i < parts.length; i++) {
+          const name = parts[i];
+          const isLast = i === parts.length - 1;
+          pathSoFar = pathSoFar ? pathSoFar + '/' + name : name;
+          if (!cur.children[name]) {
+            cur.children[name] = {
+              name,
+              isFile: isLast,
+              fullPath: isLast ? f : pathSoFar,
+              children: {},
+            };
+          }
+          cur = cur.children[name];
+        }
+      }
+      return root;
+    }
+
+    function fileExtClass(name) {
+      if (/\.tsx?$/.test(name)) return 'tsx';
+      if (/\.jsx?$/.test(name)) return 'jsx';
+      return '';
+    }
+
+    function renderTreeChildren(node, depth) {
+      const entries = Object.values(node.children).sort((a, b) => {
+        if (a.isFile !== b.isFile) return a.isFile ? 1 : -1; // folders first
+        return a.name.localeCompare(b.name);
+      });
+      let html = '';
+      for (const child of entries) {
+        const indent = `padding-left: ${8 + depth * 14}px`;
+        if (child.isFile) {
+          const isActive = child.fullPath === state.currentFilePath;
+          html += `<div class="tree-node leaf ${isActive ? 'active' : ''}"
+                        data-file="${escapeHtml(child.fullPath)}"
+                        style="${indent}"
+                        title="${escapeHtml(child.fullPath)}">
+            <span class="chev">${ICONS.chev}</span>
+            <span class="icon ${fileExtClass(child.name)}">${ICONS.file}</span>
+            <span class="name">${escapeHtml(child.name)}</span>
+          </div>`;
+        } else {
+          const isCollapsed = UI.collapsedFolders.has(child.fullPath);
+          html += `<div class="tree-node folder ${isCollapsed ? '' : 'expanded'}"
+                        data-folder="${escapeHtml(child.fullPath)}"
+                        style="${indent}"
+                        title="${escapeHtml(child.fullPath)}">
+            <span class="chev">${ICONS.chev}</span>
+            <span class="icon folder">${isCollapsed ? ICONS.folder : ICONS.folderOpen}</span>
+            <span class="name">${escapeHtml(child.name)}</span>
+          </div>`;
+          if (!isCollapsed) {
+            html += renderTreeChildren(child, depth + 1);
+          }
+        }
+      }
+      return html;
+    }
+
+    function renderFileTree() {
+      const root = $('file-tree');
+      if (!state.files.length) {
+        root.innerHTML = '<div class="list-empty">no .tsx/.jsx files found</div>';
+        return;
+      }
+      const tree = buildFileTree(state.files, state.rootDir);
+      root.innerHTML = '<div class="tree">' + renderTreeChildren(tree, 0) + '</div>';
+      root.querySelectorAll('[data-file]').forEach((n) => {
+        n.addEventListener('click', () => loadFile(n.dataset.file));
+      });
+      root.querySelectorAll('[data-folder]').forEach((n) => {
+        n.addEventListener('click', () => {
+          const fp = n.dataset.folder;
+          if (UI.collapsedFolders.has(fp)) UI.collapsedFolders.delete(fp);
+          else UI.collapsedFolders.add(fp);
+          saveUiPrefs();
+          renderFileTree();
+        });
+      });
+    }
+
+    function renderElementList() {
+      const root = $('element-list');
+      root.innerHTML = '';
+      if (!state.snapshot) {
+        root.innerHTML = '<div class="list-empty">click an element in the iframe</div>';
+        return;
+      }
+      const els = state.snapshot.elements || [];
+      if (!els.length) {
+        root.innerHTML = '<div class="list-empty">no elements</div>';
+        return;
+      }
+      for (const el of els) {
+        const key = selectionKey(el);
+        const div = document.createElement('div');
+        div.className = 'list-item' + (key === state.selectedKey ? ' active' : '');
+        div.innerHTML = `
+          <span class="kind">&lt;</span><span class="name">${escapeHtml(el.tagName)}</span><span class="kind">&gt;</span>
+          <span class="meta">L${el.line}</span>
+        `;
+        div.onclick = () => {
+          state.selectedKey = key;
+          state.selectedElement = el;
+          renderElementList();
+          renderInspector();
+          hideOverlay();
+        };
+        root.appendChild(div);
+      }
+    }
+
+    function selectionKey(el) {
+      return `${el.tagName}@L${el.line}`;
+    }
+    function findBySelectionKey(key, elements) {
+      return elements.find((e) => selectionKey(e) === key) || null;
+    }
+
+    // ---------- Iframe + selection overlay ----------
+    function showOverlay(rect) {
+      const overlay = $('select-overlay');
+      const shell = $('iframe-shell');
+      const iframe = $('app-iframe');
+      const sb = shell.getBoundingClientRect();
+      const ib = iframe.getBoundingClientRect();
+      const offsetLeft = ib.left - sb.left;
+      const offsetTop = ib.top - sb.top;
+      overlay.style.left = (offsetLeft + rect.left) + 'px';
+      overlay.style.top = (offsetTop + rect.top) + 'px';
+      overlay.style.width = rect.width + 'px';
+      overlay.style.height = rect.height + 'px';
+      overlay.classList.add('show');
+    }
+    function hideOverlay() {
+      $('select-overlay').classList.remove('show');
+    }
+
+    window.addEventListener('message', (e) => {
+      const data = e.data || {};
+      switch (data.type) {
+        case 'FRAMELAB_CLICK':
+          handleIframeClick(data.framelabId, data.rect, data.computed); break;
+        case 'FRAMELAB_DRAG_START':
+          handleDragStart(data.sourceId); break;
+        case 'FRAMELAB_DRAG_OVER':
+          handleDragOver(data.targetId, data.position, data.rect); break;
+        case 'FRAMELAB_DROP':
+          handleDrop(data.sourceId, data.targetId, data.position); break;
+        case 'FRAMELAB_DRAG_CANCEL':
+          handleDragCancel(); break;
+      }
+    });
+
+    function handleDragStart(sourceId) {
+      state.dragging = { sourceId };
+      document.querySelector('.stage').classList.add('dragging');
+      hideOverlay();
+    }
+
+    function handleDragOver(targetId, position, rect) {
+      const ind = $('drop-indicator');
+      if (!targetId || !rect) {
+        ind.classList.remove('show');
+        return;
+      }
+      const shell = $('iframe-shell');
+      const iframe = $('app-iframe');
+      const sb = shell.getBoundingClientRect();
+      const ib = iframe.getBoundingClientRect();
+      const offsetLeft = ib.left - sb.left;
+      const offsetTop = ib.top - sb.top;
+      const y = position === 'before'
+        ? offsetTop + rect.top - 1.5
+        : offsetTop + rect.top + rect.height - 1.5;
+      ind.style.top = y + 'px';
+      ind.style.left = (offsetLeft + rect.left) + 'px';
+      ind.style.width = rect.width + 'px';
+      ind.classList.add('show');
+    }
+
+    function handleDragCancel() {
+      state.dragging = null;
+      document.querySelector('.stage').classList.remove('dragging');
+      $('drop-indicator').classList.remove('show');
+    }
+
+    async function handleDrop(sourceId, targetId, position) {
+      handleDragCancel();
+      if (!sourceId || !targetId || !position || sourceId === targetId) return;
+      const filePath = filePathFromId(sourceId);
+      if (!filePath) return;
+      try {
+        const res = await fetch(`${SERVER_URL}/move`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ filePath, sourceId, targetId, position }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          flashError(body.error || `move failed (${res.status})`);
+          return;
+        }
+        // Structural reorders cause Next.js SSR/HMR mismatches because the
+        // hydrated DOM and the new module disagree on child order. Force a
+        // full iframe reload so SSR HTML and the client tree start fresh.
+        const sourceEl = state.snapshot && state.snapshot.elements
+          .find((x) => x.framelabId === sourceId);
+        const targetEl = state.snapshot && state.snapshot.elements
+          .find((x) => x.framelabId === targetId);
+        state.selectedKey = null;
+        state.selectedElement = null;
+        state.selectedComputed = null;
+        renderInspector();
+        reloadIframe();
+        flashStatus('connected');
+        if (sourceEl && targetEl) {
+          await maybeAutoCommit('move', {
+            filePath,
+            tagName: sourceEl.tagName,
+            line: sourceEl.line,
+            position,
+            targetTag: targetEl.tagName,
+            targetLine: targetEl.line,
+          });
+        }
+      } catch (err) {
+        flashError(err.message || 'move failed');
+      }
+    }
+
+    function reloadIframe() {
+      const iframe = $('app-iframe');
+      const url = APP_URL + (APP_URL.includes('?') ? '&' : '?') + '_cf=' + Date.now();
+      iframe.src = url;
+    }
+
+    function flashError(msg) {
+      const status = $('status');
+      const text = status.querySelector('.status-text');
+      const dot = status.querySelector('.dot');
+      const prevText = text.textContent;
+      text.textContent = msg;
+      dot.className = 'dot disconnected';
+      status.className = 'status disconnected';
+      setTimeout(() => {
+        text.textContent = prevText;
+        dot.className = 'dot connected';
+        status.className = 'status connected';
+      }, 1800);
+    }
+
+    async function handleIframeClick(framelabId, rect, computed) {
+      const filePath = filePathFromId(framelabId);
+      if (!filePath) return;
+      // Strong intent: user wants to inspect. Auto-reveal the inspector
+      // panel + switch to its tab if they had it hidden.
+      if (!UI.panels.right) setPanel('right', true);
+      switchTab('inspector');
+      if (state.currentFilePath !== filePath) await loadFile(filePath);
+      const snap = state.snapshot;
+      if (!snap) return;
+
+      let el = snap.elements.find((x) => x.framelabId === framelabId);
+      if (!el) {
+        const parts = framelabId.split('|');
+        const tag = parts[0];
+        const line = Number(parts[parts.length - 2]);
+        el = snap.elements.find((x) => x.tagName === tag && x.line === line);
+      }
+      if (!el) return;
+      state.selectedElement = el;
+      state.selectedKey = selectionKey(el);
+      state.selectedRect = rect;
+      state.selectedComputed = computed || null;
+      renderElementList();
+      renderInspector();
+      showOverlay(rect);
+    }
+
+    function filePathFromId(id) {
+      const i1 = id.indexOf('|');
+      const i3 = id.lastIndexOf('|');
+      const i2 = id.lastIndexOf('|', i3 - 1);
+      if (i1 < 0 || i2 < 0 || i3 < 0) return null;
+      return id.slice(i1 + 1, i2);
+    }
+
+    // ---------- Inspector ----------
+    function renderInspector() {
+      const empty = $('inspector-empty');
+      const inspector = $('inspector');
+      const el = state.selectedElement;
+      if (!el) {
+        empty.style.display = '';
+        inspector.innerHTML = '';
+        return;
+      }
+      empty.style.display = 'none';
+
+      if (el.classNameKind === 'expression') {
+        inspector.innerHTML = `
+          <div class="inspector-head">
+            <div class="tag">&lt;${escapeHtml(el.tagName)}&gt;</div>
+            <div class="meta">L${el.line}</div>
+          </div>
+          <div class="bare-msg">
+            <b>complex className</b><br/>
+            This element uses <span class="mono">cn()</span>, a template literal, or another expression.
+            Edit it in your editor — the inspector cannot parse non-static class strings.
+          </div>`;
+        return;
+      }
+
+      const props = (el.props && el.props.props) || {};
+      inspector.innerHTML = `
+        ${spacingDatalistHtml()}
+        <div class="inspector-head">
+          <div class="tag">&lt;${escapeHtml(el.tagName)}&gt;</div>
+          <div class="meta">L${el.line} · ${escapeHtml(basename(state.currentFilePath || ''))}</div>
+        </div>
+        ${textContentSection(el)}
+        <div class="raw-classname">
+          <div class="label">className</div>
+          <div class="value" id="raw-classname-value">${escapeHtml(el.className || '')}</div>
+          <div class="copy-hint" id="raw-classname-copy">copy</div>
+        </div>
+        ${section('Background', sectionBackground(props))}
+        ${section('Text', sectionText(props))}
+        ${section('Padding', spacingInputs('padding', props.padding))}
+        ${section('Margin', spacingInputs('margin', props.margin))}
+        ${section('Border', sectionBorder(props))}
+        ${section('Layout', sectionLayout(props))}
+        ${section('Size', sectionSize(props))}
+        ${section('Effects', sectionEffects(props))}
+      `;
+      bindInspectorInputs();
+    }
+
+    function section(title, body) {
+      const id = title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const collapsed = UI.collapsedSections.has(id);
+      return `<div class="section ${collapsed ? 'collapsed' : ''}" data-section="${id}">
+        <h4 data-section-toggle="${id}">
+          <span class="section-chev">${ICONS.chevDown}</span>
+          ${title}
+        </h4>
+        <div class="section-body">${body}</div>
+      </div>`;
+    }
+
+    function textContentSection(el) {
+      const kind = el.textKind || 'empty';
+      const editable = kind === 'text' || kind === 'empty';
+      const value = el.textContent || '';
+      let badge = '';
+      let hint = '';
+      if (kind === 'expression') {
+        badge = `<span class="badge">dynamic</span>`;
+        hint = 'this element renders {expression} children — edit in code';
+      } else if (kind === 'children') {
+        badge = `<span class="badge">contains elements</span>`;
+        hint = 'this element wraps other tags — pick a child to edit its text';
+      } else if (kind === 'empty') {
+        badge = `<span class="badge">empty</span>`;
+        hint = 'this element has no text — typing here will insert text content';
+      }
+
+      return `
+        <div class="text-content">
+          <div class="label">text content ${badge}</div>
+          <textarea id="text-content-input" rows="2"
+                    ${editable ? '' : 'disabled'}
+                    placeholder="${editable ? 'type to replace text content' : ''}"
+                    spellcheck="true">${escapeHtml(value)}</textarea>
+          ${hint ? `<div class="hint">${hint}</div>` : ''}
+        </div>`;
+    }
+
+    function textInput(prop, val, ph, listId) {
+      const list = listId ? ` list="${listId}"` : '';
+      return `<input type="text" data-prop="${prop}" value="${escapeHtml(val ?? '')}" placeholder="${ph || ''}" spellcheck="false"${list} />`;
+    }
+    function selectInput(prop, val, options) {
+      const seen = new Set();
+      const opts = options.filter(o => {
+        if (seen.has(o.value)) return false;
+        seen.add(o.value); return true;
+      }).map(o => `<option value="${escapeHtml(o.value)}" ${String(val ?? '') === o.value ? 'selected' : ''}>${escapeHtml(o.label)}</option>`).join('');
+      return `<select data-prop="${prop}">${opts}</select>`;
+    }
+    // Grouped select: project tokens up top, Tailwind defaults below.
+    // Tailwind's `DEFAULT` key represents the bare class (e.g. `rounded`,
+    // `shadow`), so we map it to an empty value internally.
+    function selectGrouped(prop, val, partition, opts = {}) {
+      const { customLabel = 'project', defaultLabel = 'tailwind', dashEmpty = true } = opts;
+      const norm = (k) => (k === 'DEFAULT' ? '' : k);
+      const labelOf = (k) => (k === 'DEFAULT' ? 'default' : k);
+      const stringVal = String(val ?? '');
+      let html = '';
+      if (dashEmpty) {
+        html += `<option value="" ${stringVal === '' ? 'selected' : ''}>—</option>`;
+      }
+      const customKeys = (partition.custom || []).filter((k) => k !== 'DEFAULT' || true);
+      if (customKeys.length) {
+        html += `<optgroup label="${customLabel}">`;
+        for (const k of customKeys) {
+          const v = norm(k);
+          html += `<option value="${escapeHtml(v)}" ${stringVal === v ? 'selected' : ''}>${escapeHtml(labelOf(k))}</option>`;
+        }
+        html += '</optgroup>';
+      }
+      const defKeys = partition.defaults || partition.all || [];
+      if (defKeys.length) {
+        html += `<optgroup label="${defaultLabel}">`;
+        for (const k of defKeys) {
+          const v = norm(k);
+          html += `<option value="${escapeHtml(v)}" ${stringVal === v ? 'selected' : ''}>${escapeHtml(labelOf(k))}</option>`;
+        }
+        html += '</optgroup>';
+      }
+      return `<select data-prop="${prop}">${html}</select>`;
+    }
+    function spacingDatalistHtml() {
+      const all = TOKENS.spacing.all || [];
+      return `<datalist id="cf-spacing-scale">${all.map((k) => `<option value="${escapeHtml(k)}"></option>`).join('')}</datalist>`;
+    }
+
+    // Curated default Tailwind palette — used when there's no project config,
+    // or as the "Tailwind" group below the project's own tokens.
+    const DEFAULT_PRESETS = [
+      { name: 'transparent', value: 'transparent' },
+      { name: 'white', value: '#ffffff' },
+      { name: 'black', value: '#000000' },
+      { name: 'zinc-100', value: '#f4f4f5' },
+      { name: 'zinc-300', value: '#d4d4d8' },
+      { name: 'zinc-500', value: '#71717a' },
+      { name: 'zinc-700', value: '#3f3f46' },
+      { name: 'zinc-900', value: '#18181b' },
+      { name: 'zinc-950', value: '#09090b' },
+      { name: 'red-500', value: '#ef4444' },
+      { name: 'orange-500', value: '#f97316' },
+      { name: 'amber-500', value: '#f59e0b' },
+      { name: 'yellow-500', value: '#eab308' },
+      { name: 'green-500', value: '#22c55e' },
+      { name: 'emerald-500', value: '#10b981' },
+      { name: 'teal-500', value: '#14b8a6' },
+      { name: 'cyan-500', value: '#06b6d4' },
+      { name: 'blue-500', value: '#3b82f6' },
+      { name: 'blue-600', value: '#2563eb' },
+      { name: 'indigo-500', value: '#6366f1' },
+      { name: 'violet-500', value: '#8b5cf6' },
+      { name: 'purple-500', value: '#a855f7' },
+      { name: 'pink-500', value: '#ec4899' },
+      { name: 'rose-500', value: '#f43f5e' },
+    ];
+    let COLOR_HEX = Object.fromEntries(DEFAULT_PRESETS.map((c) => [c.name, c.value]));
+
+    // Tailwind v3 default scales — used as fallback when no project config or
+    // as the "Tailwind" optgroup beside any custom keys the project added.
+    const DEFAULT_TOKENS = {
+      spacing: ['px','0','0.5','1','1.5','2','2.5','3','3.5','4','5','6','7','8','9','10','11','12','14','16','20','24','28','32','36','40','44','48','52','56','60','64','72','80','96'],
+      fontSize: ['xs','sm','base','lg','xl','2xl','3xl','4xl','5xl','6xl','7xl','8xl','9xl'],
+      borderRadius: ['none','sm','DEFAULT','md','lg','xl','2xl','3xl','full'],
+      boxShadow: ['DEFAULT','sm','md','lg','xl','2xl','inner','none'],
+      fontWeight: ['thin','extralight','light','normal','medium','semibold','bold','extrabold','black'],
+    };
+    let TOKENS = {
+      spacing: { all: DEFAULT_TOKENS.spacing, custom: [], defaults: DEFAULT_TOKENS.spacing },
+      fontSize: { all: DEFAULT_TOKENS.fontSize, custom: [], defaults: DEFAULT_TOKENS.fontSize },
+      borderRadius: { all: DEFAULT_TOKENS.borderRadius, custom: [], defaults: DEFAULT_TOKENS.borderRadius },
+      boxShadow: { all: DEFAULT_TOKENS.boxShadow, custom: [], defaults: DEFAULT_TOKENS.boxShadow },
+      fontWeight: { all: DEFAULT_TOKENS.fontWeight, custom: [], defaults: DEFAULT_TOKENS.fontWeight },
+    };
+
+    // ---------- Value normalization ----------
+    // Anything the user types (or picks) goes through normalize before being
+    // stored. Hex codes / lengths get bracket-wrapped to match Tailwind's
+    // arbitrary-value syntax: "#ff0000" -> "[#ff0000]", "18px" -> "[18px]".
+    function normalizeColorValue(v) {
+      if (v == null) return null;
+      v = String(v).trim();
+      if (!v) return null;
+      if (v.startsWith('[') && v.endsWith(']')) return v;
+      if (/^#[0-9a-fA-F]{3,8}$/.test(v)) return `[${v}]`;
+      if (/^[0-9a-fA-F]{6}$/.test(v) || /^[0-9a-fA-F]{3}$/.test(v)) return `[#${v}]`;
+      if (/^(rgb|rgba|hsl|hsla)\(/i.test(v)) return `[${v.replace(/\s+/g, '_')}]`;
+      return v;
+    }
+
+    function normalizeLengthValue(v) {
+      if (v == null) return null;
+      v = String(v).trim();
+      if (!v) return null;
+      if (v.startsWith('[') && v.endsWith(']')) return v;
+      if (/^-?\d*\.?\d+(px|rem|em|%|vh|vw|pt|ch)$/i.test(v)) return `[${v}]`;
+      return v;
+    }
+
+    // Turn any value (named class, bracket arbitrary, hex) into a #rrggbb
+    // string we can hand to <input type="color">.
+    function colorToHex(v) {
+      if (!v) return null;
+      v = String(v).trim();
+      if (!v) return null;
+      if (v.startsWith('[') && v.endsWith(']')) {
+        return cssColorToHex(v.slice(1, -1).replace(/_/g, ' '));
+      }
+      if (v.startsWith('#')) return cssColorToHex(v);
+      if (COLOR_HEX[v] && COLOR_HEX[v] !== 'transparent') return COLOR_HEX[v];
+      return null;
+    }
+
+    // Resolve named CSS color or rgb()/hsl() string into '#rrggbb' via the
+    // browser's CSS engine. Returns null if the input isn't a valid color.
+    const _colorProbe = document.createElement('div');
+    function cssColorToHex(css) {
+      if (!css) return null;
+      _colorProbe.style.color = '';
+      _colorProbe.style.color = css;
+      if (!_colorProbe.style.color) return null;
+      document.body.appendChild(_colorProbe);
+      const computed = getComputedStyle(_colorProbe).color;
+      document.body.removeChild(_colorProbe);
+      const m = computed.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      if (!m) return null;
+      return '#' + [1,2,3].map(i => Number(m[i]).toString(16).padStart(2,'0')).join('');
+    }
+
+    // Pick the best hex preview for a color value:
+    //   1. its own hex if value is hex/bracket-hex
+    //   2. our hardcoded named-color map (covers the swatch palette)
+    //   3. the iframe's getComputedStyle for the selected element (handles
+    //      anything in Tailwind's full palette without us hardcoding it)
+    //   4. a neutral gray fallback for the picker UI
+    function previewHex(propValue, computedFallback) {
+      return colorToHex(propValue)
+        || (computedFallback ? cssColorToHex(computedFallback) : null)
+        || '#444444';
+    }
+
+    function colorRow(label, prop, val, computedFallback) {
+      const hex = previewHex(val, computedFallback);
+      const displayVal = val == null ? '' : String(val);
+      return `
+        <div class="row">
+          <label>${label}</label>
+          <div class="color-input-group">
+            <input type="color" class="color-pick" data-color-pick="${prop}" value="${hex}" />
+            <input type="text" class="color-text" data-prop="${prop}" data-color-input="1"
+                   value="${escapeHtml(displayVal)}"
+                   placeholder="blue-600 or #hex"
+                   spellcheck="false" />
+          </div>
+        </div>`;
+    }
+
+    function sectionBackground(p) {
+      const fb = state.selectedComputed && state.selectedComputed.backgroundColor;
+      return colorRow('Color', 'background', p.background, fb);
+    }
+    function sectionText(p) {
+      const fb = state.selectedComputed && state.selectedComputed.color;
+      return `
+        ${colorRow('Color', 'textColor', p.textColor, fb)}
+        <div class="row">
+          <label>Size</label>
+          ${selectGrouped('fontSize', p.fontSize, TOKENS.fontSize)}
+        </div>
+        <div class="row">
+          <label>Weight</label>
+          ${selectGrouped('fontWeight', p.fontWeight, TOKENS.fontWeight)}
+        </div>`;
+    }
+    function sectionBorder(p) {
+      return `
+        <div class="row">
+          <label>Radius</label>
+          ${selectGrouped('rounded', p.rounded, TOKENS.borderRadius)}
+        </div>
+        <div class="row">
+          <label>Width</label>
+          ${textInput('borderWidth', p.borderWidth, '0/1/2/4 or 3px')}
+        </div>
+        ${colorRow('Color', 'borderColor', p.borderColor, state.selectedComputed && state.selectedComputed.borderColor)}`;
+    }
+    function sectionLayout(p) {
+      const isFlex = p.display === 'flex' || p.display === 'inline-flex';
+      const isGrid = p.display === 'grid' || p.display === 'inline-grid';
+      const flexBlock = (isFlex || isGrid) ? `
+        ${isFlex ? `
+        <div class="row">
+          <label>Direction</label>
+          <div class="toggle-group">
+            <button data-set-prop="flexDirection" data-set-value="row" class="${p.flexDirection === 'row' || !p.flexDirection ? 'active' : ''}">row</button>
+            <button data-set-prop="flexDirection" data-set-value="col" class="${p.flexDirection === 'col' ? 'active' : ''}">col</button>
+          </div>
+        </div>` : ''}
+        <div class="row">
+          <label>Items</label>
+          ${selectInput('alignItems', p.alignItems, [
+            { value: '', label: '—' },
+            ...['start','center','end','baseline','stretch'].map(v => ({value: v, label: v})),
+          ])}
+        </div>
+        <div class="row">
+          <label>Justify</label>
+          ${selectInput('justifyContent', p.justifyContent, [
+            { value: '', label: '—' },
+            ...['start','center','end','between','around','evenly'].map(v => ({value: v, label: v})),
+          ])}
+        </div>
+        <div class="row">
+          <label>Gap</label>
+          ${textInput('gap', p.gap, '0/2/4/6', 'cf-spacing-scale')}
+        </div>` : '';
+      return `
+        <div class="row">
+          <label>Display</label>
+          <div class="toggle-group">
+            ${['block','flex','grid'].map(v => `
+              <button data-set-prop="display" data-set-value="${v}" class="${p.display === v ? 'active' : ''}">${v}</button>
+            `).join('')}
+          </div>
+        </div>
+        ${flexBlock}`;
+    }
+    function sectionSize(p) {
+      return `
+        <div class="row"><label>W</label>${textInput('width', p.width, 'auto/full/4', 'cf-spacing-scale')}</div>
+        <div class="row"><label>H</label>${textInput('height', p.height, 'auto/full/4', 'cf-spacing-scale')}</div>`;
+    }
+    function sectionEffects(p) {
+      const opacity = p.opacity != null && p.opacity !== '' ? Number(p.opacity) : 100;
+      return `
+        <div class="row">
+          <label>Opacity</label>
+          <input type="range" min="0" max="100" value="${opacity}" data-prop="opacity" />
+          <span class="value-display" data-display="opacity">${opacity}</span>
+        </div>
+        <div class="row">
+          <label>Shadow</label>
+          ${selectGrouped('shadow', p.shadow, TOKENS.boxShadow)}
+        </div>`;
+    }
+
+    function spacingInputs(name, spacing) {
+      const s = spacing || { top: null, right: null, bottom: null, left: null };
+      const allEqual =
+        s.top !== null && s.top === s.right && s.top === s.bottom && s.top === s.left;
+      const ds = 'cf-spacing-scale';
+      return `
+        <div class="row">
+          <label>All</label>
+          ${textInput(`${name}.all`, allEqual ? s.top : '', '0/2/4/6', ds)}
+        </div>
+        <div class="grid-4">
+          ${textInput(`${name}.top`, s.top, 'top', ds)}
+          ${textInput(`${name}.right`, s.right, 'right', ds)}
+          ${textInput(`${name}.bottom`, s.bottom, 'bottom', ds)}
+          ${textInput(`${name}.left`, s.left, 'left', ds)}
+        </div>`;
+    }
+
+    const COLOR_PROPS = new Set(['background', 'textColor', 'borderColor']);
+    const LENGTH_PROPS = new Set([
+      'borderWidth', 'gap', 'width', 'height',
+      'minWidth', 'minHeight', 'maxWidth', 'maxHeight',
+    ]);
+
+    function normalizeForProp(prop, value) {
+      const leaf = prop.includes('.') ? prop.split('.')[0] : prop;
+      if (COLOR_PROPS.has(leaf)) return normalizeColorValue(value);
+      if (leaf === 'fontSize') return normalizeLengthValue(value);
+      if (leaf === 'padding' || leaf === 'margin') return normalizeLengthValue(value);
+      if (LENGTH_PROPS.has(leaf)) return normalizeLengthValue(value);
+      return value === '' || value == null ? null : String(value);
+    }
+
+    function bindInspectorInputs() {
+      const root = $('inspector');
+
+      // Native color picker → set the prop to bracket-arbitrary hex
+      root.querySelectorAll('[data-color-pick]').forEach((picker) => {
+        const prop = picker.dataset.colorPick;
+        picker.addEventListener('input', () => {
+          const hex = picker.value; // '#rrggbb'
+          const stored = `[${hex}]`;
+          applyPropChange(prop, stored, { skipNormalize: true });
+          // Mirror to the sibling text input so the user sees what was set
+          const text = root.querySelector(`input.color-text[data-prop="${prop}"]`);
+          if (text) text.value = hex;
+        });
+      });
+
+      // Generic prop inputs (text/select/range) — same path, with normalization
+      root.querySelectorAll('[data-prop]').forEach((input) => {
+        const prop = input.dataset.prop;
+        const handler = () => {
+          applyPropChange(prop, input.value);
+          if (input.type === 'range') {
+            const display = root.querySelector(`[data-display="${prop}"]`);
+            if (display) display.textContent = input.value;
+          }
+          if (input.dataset.colorInput) {
+            const hex = colorToHex(normalizeColorValue(input.value));
+            const picker = root.querySelector(`input.color-pick[data-color-pick="${prop}"]`);
+            if (picker && hex) picker.value = hex;
+          }
+        };
+        if (input.type === 'range') input.addEventListener('input', handler);
+        else if (input.tagName === 'SELECT') input.addEventListener('change', handler);
+        else input.addEventListener('input', handler);
+      });
+
+      // Preset buttons (display/direction toggles + color swatches)
+      root.querySelectorAll('[data-set-prop]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          applyPropChange(btn.dataset.setProp, btn.dataset.setValue);
+          renderInspector();
+        });
+      });
+
+      // Collapsible section headers
+      root.querySelectorAll('[data-section-toggle]').forEach((h) => {
+        h.addEventListener('click', () => {
+          const id = h.dataset.sectionToggle;
+          const sec = h.closest('.section');
+          if (UI.collapsedSections.has(id)) {
+            UI.collapsedSections.delete(id);
+            sec.classList.remove('collapsed');
+          } else {
+            UI.collapsedSections.add(id);
+            sec.classList.add('collapsed');
+          }
+          saveUiPrefs();
+        });
+      });
+
+      // Text content textarea
+      const textArea = $('text-content-input');
+      if (textArea && !textArea.disabled) {
+        textArea.addEventListener('input', () => {
+          state.pendingTextContent = textArea.value;
+          state.selectedElement.textContent = textArea.value;
+          clearTimeout(state.debounceTimer);
+          state.debounceTimer = setTimeout(flushUpdate, 300);
+        });
+      }
+
+      // Copy raw className to clipboard
+      const copyBtn = $('raw-classname-copy');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', async () => {
+          const v = state.selectedElement && state.selectedElement.className;
+          if (!v) return;
+          try {
+            await navigator.clipboard.writeText(v);
+            copyBtn.textContent = 'copied';
+            copyBtn.classList.add('flash');
+            setTimeout(() => {
+              copyBtn.textContent = 'copy';
+              copyBtn.classList.remove('flash');
+            }, 900);
+          } catch (e) {}
+        });
+      }
+    }
+
+    function applyPropChange(prop, rawValue, opts) {
+      if (!state.selectedElement) return;
+      const value = (opts && opts.skipNormalize) ? rawValue : normalizeForProp(prop, rawValue);
+      const props = (state.selectedElement.props && state.selectedElement.props.props) || {};
+      const patch = {};
+
+      if (prop.includes('.')) {
+        const [parent, child] = prop.split('.');
+        if (child === 'all') {
+          patch[parent] = { top: value, right: value, bottom: value, left: value };
+          props[parent] = { ...(props[parent] || {}), ...patch[parent] };
+        } else {
+          patch[parent] = { [child]: value };
+          props[parent] = { ...(props[parent] || {}), [child]: value };
+        }
+      } else {
+        patch[prop] = value;
+        props[prop] = value;
+      }
+
+      state.selectedElement.props = state.selectedElement.props || { props: {}, unknown: [] };
+      state.selectedElement.props.props = props;
+
+      queueUpdate(patch);
+    }
+
+    function queueUpdate(patch) {
+      for (const [k, v] of Object.entries(patch)) {
+        if (v && typeof v === 'object' && !Array.isArray(v)) {
+          state.pendingProps[k] = { ...(state.pendingProps[k] || {}), ...v };
+        } else {
+          state.pendingProps[k] = v;
+        }
+      }
+      clearTimeout(state.debounceTimer);
+      state.debounceTimer = setTimeout(flushUpdate, 300);
+    }
+
+    async function flushUpdate() {
+      const props = state.pendingProps;
+      const text = state.pendingTextContent;
+      state.pendingProps = {};
+      state.pendingTextContent = undefined;
+      const hasProps = Object.keys(props).length > 0;
+      const hasText = text !== undefined;
+      if (!hasProps && !hasText) return;
+      flashStatus('connected');
+      try {
+        const payload = {};
+        if (hasProps) payload.props = props;
+        if (hasText) payload.textContent = text;
+        const el = state.selectedElement;
+        await pushUpdate(payload);
+        // Auto-commit dispatch — choose the most descriptive kind. Style and
+        // text edits are sent as separate commits if both present in one batch.
+        if (UI.autoCommit && el) {
+          const ctx = {
+            filePath: state.currentFilePath,
+            tagName: el.tagName,
+            line: el.line,
+          };
+          if (hasProps) {
+            const changes = [];
+            for (const [prop, value] of Object.entries(props)) {
+              if (value && typeof value === 'object' && !Array.isArray(value)) {
+                for (const [sub, v] of Object.entries(value)) {
+                  changes.push({ prop, sub, value: v });
+                }
+              } else {
+                changes.push({ prop, value });
+              }
+            }
+            await maybeAutoCommit('style', { ...ctx, changes });
+          }
+          if (hasText) {
+            await maybeAutoCommit('text', { ...ctx, text });
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    // ---------- Helpers ----------
+    function escapeHtml(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    // ---------- Diff panel ----------
+    const diffState = {
+      data: null,            // last DIFF_SYNC payload
+      collapsed: new Set(),  // file paths whose hunks are folded
+    };
+
+    // Atomic-commit session log: every commit made since the canvas connected
+    // (auto + manual). Newest first. Capped to keep memory reasonable.
+    const sessionLog = {
+      commits: [],
+      record(sha, message, kind) {
+        if (!sha) return;
+        this.commits.unshift({ sha, message, kind: kind || 'edit', time: new Date() });
+        if (this.commits.length > 200) this.commits.length = 200;
+        if (UI.autoCommit) renderDiff(diffState.data);
+      },
+    };
+
+    // ---------- Auto-commit ----------
+    function autoCommitMessage(kind, ctx) {
+      const file = ctx.filePath ? basename(ctx.filePath) : '';
+      const where = (ctx.tagName && ctx.line) ? ` ${ctx.tagName}@L${ctx.line}` : '';
+      const fileTag = file ? `(${file})` : '';
+      switch (kind) {
+        case 'style': {
+          const parts = (ctx.changes || []).slice(0, 3).map((c) => {
+            const v = c.value === null || c.value === undefined ? '∅' : String(c.value);
+            const subProp = c.sub ? `${c.prop}.${c.sub}` : c.prop;
+            return `${subProp} → ${v}`;
+          });
+          const more = (ctx.changes && ctx.changes.length > 3) ? `, +${ctx.changes.length - 3} more` : '';
+          return `style${fileTag}:${where} ${parts.join(', ')}${more}`;
+        }
+        case 'text': {
+          const t = (ctx.text || '').replace(/\s+/g, ' ').trim();
+          const trimmed = t.length > 40 ? t.slice(0, 40) + '…' : t;
+          return `text${fileTag}:${where} → ${JSON.stringify(trimmed)}`;
+        }
+        case 'move':
+          return `move${fileTag}:${where} ${ctx.position} ${ctx.targetTag}@L${ctx.targetLine}`;
+        case 'revert-hunk':
+          return `revert${fileTag}: hunk ${ctx.hunkIndex}`;
+        case 'revert-file':
+          return `revert${fileTag}`;
+        default:
+          return `edit${fileTag}`;
+      }
+    }
+
+    async function maybeAutoCommit(kind, ctx) {
+      if (!UI.autoCommit) return;
+      const message = autoCommitMessage(kind, ctx);
+      try {
+        const res = await fetch(`${SERVER_URL}/diff/commit`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ message }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (res.ok && body.sha) {
+          sessionLog.record(body.sha, message, kind.split('-')[0]);
+        }
+      } catch (e) {
+        console.warn('auto-commit failed', e);
+      }
+    }
+
+    function setAutoCommit(on) {
+      UI.autoCommit = !!on;
+      const btn = $('auto-commit-toggle');
+      if (btn) btn.classList.toggle('on', UI.autoCommit);
+      // Hide pending-only buttons when auto-commit is on (no manual commits needed)
+      const commitBtn = $('diff-commit-btn');
+      const discardBtn = $('diff-discard-btn');
+      const msgEl = $('commit-message');
+      const hide = UI.autoCommit ? 'none' : '';
+      if (commitBtn) commitBtn.style.display = hide;
+      if (discardBtn) discardBtn.style.display = hide;
+      if (msgEl) msgEl.style.display = hide;
+      saveUiPrefs();
+      renderDiff(diffState.data);
+    }
+    function toggleAutoCommit() { setAutoCommit(!UI.autoCommit); }
+
+    function switchTab(tab) {
+      $('tab-inspector').classList.toggle('active', tab === 'inspector');
+      $('tab-diff').classList.toggle('active', tab === 'diff');
+      $('pane-inspector').classList.toggle('active', tab === 'inspector');
+      $('pane-diff').classList.toggle('active', tab === 'diff');
+    }
+
+    async function fetchDiff() {
+      try {
+        const data = await api('GET', '/diff');
+        renderDiff(data);
+      } catch (e) {
+        console.warn('fetchDiff failed', e);
+      }
+    }
+
+    function renderDiff(data) {
+      diffState.data = data || { initialized: false, files: [], diff: '' };
+      const fileCount = (data && data.files && data.files.length) || 0;
+
+      const badge = $('diff-badge');
+      const list = $('diff-list');
+      $('diff-commit-btn').disabled = fileCount === 0;
+      $('diff-discard-btn').disabled = fileCount === 0;
+      const msgEl = $('commit-message');
+      if (msgEl && !msgEl.value && data && data.suggestedMessage) msgEl.value = data.suggestedMessage;
+      if (msgEl && fileCount === 0) msgEl.value = '';
+
+      // Session-log mode: replace the file diff view with the running log.
+      if (UI.autoCommit) {
+        const count = sessionLog.commits.length;
+        badge.textContent = String(count);
+        badge.classList.toggle('zero', count === 0);
+        list.innerHTML = renderSessionLog();
+        return;
+      }
+
+      badge.textContent = String(fileCount);
+      badge.classList.toggle('zero', fileCount === 0);
+
+      const empty = $('diff-empty');
+
+      if (!data || !data.initialized) {
+        list.innerHTML = '<div class="diff-empty">Not a git repository.<br/><br/>' +
+          '<span style="color: var(--text3); font-size: 11px;">Run <span class="mono">git init</span> in your project to enable the diff panel.</span></div>';
+        return;
+      }
+
+      if (fileCount === 0) {
+        list.innerHTML = '<div class="diff-empty">No pending changes.<br/><br/>' +
+          '<span style="color: var(--text3); font-size: 11px;">Edit a Tailwind class or text on the canvas to see your diff appear here.</span></div>';
+        return;
+      }
+
+      const fileBlocks = parseUnifiedDiff(data.diff || '');
+      const html = (data.files || []).map((f) => {
+        const block = fileBlocks[f.path] || { added: 0, removed: 0, lines: [] };
+        const isCollapsed = diffState.collapsed.has(f.path);
+        return `
+          <div class="diff-file" data-file="${escapeHtml(f.path)}">
+            <div class="diff-file-head ${isCollapsed ? 'collapsed' : ''}" data-toggle="${escapeHtml(f.path)}">
+              <span class="chev">▾</span>
+              <span class="path" title="${escapeHtml(f.path)}">${escapeHtml(f.path)}</span>
+              <span class="stat">
+                <span class="add">+${block.added}</span>
+                <span class="del">-${block.removed}</span>
+              </span>
+              <button class="revert-btn" data-revert="${escapeHtml(f.path)}" title="revert this file to HEAD">revert file</button>
+            </div>
+            <div class="diff-file-body ${isCollapsed ? 'collapsed' : ''}">
+              ${block.lines.map((l) => renderDiffLine(l, f.path)).join('') ||
+                '<div class="diff-line context" style="padding:8px 14px;color:var(--text3)">(new or untracked file)</div>'}
+            </div>
+          </div>`;
+      }).join('');
+
+      list.innerHTML = html;
+
+      list.querySelectorAll('[data-toggle]').forEach((head) => {
+        head.addEventListener('click', (e) => {
+          if (e.target && e.target.dataset && e.target.dataset.revert !== undefined) return;
+          const filePath = head.dataset.toggle;
+          if (diffState.collapsed.has(filePath)) diffState.collapsed.delete(filePath);
+          else diffState.collapsed.add(filePath);
+          renderDiff(diffState.data);
+        });
+      });
+      list.querySelectorAll('[data-revert]').forEach((btn) => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const rel = btn.dataset.revert;
+          showConfirmModal(
+            `Discard all changes to <code>${rel}</code>? This will restore it to the last committed state.`,
+            () => revertFile(rel)
+          );
+        });
+      });
+      list.querySelectorAll('[data-revert-hunk]').forEach((btn) => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const filePath = btn.dataset.revertHunk;
+          const hunkIndex = Number(btn.dataset.hunkIndex);
+          await revertHunk(filePath, hunkIndex);
+        });
+      });
+    }
+
+    function renderSessionLog() {
+      if (!sessionLog.commits.length) {
+        return `<div class="session-empty">
+          No edits yet this session.<br/><br/>
+          <span style="color: var(--text3); font-size: 11px;">
+            Make any edit (color, padding, drag, text) and watch it commit automatically.
+          </span>
+        </div>`;
+      }
+      const fmtTime = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+      return `<div class="session-list">${
+        sessionLog.commits.map((c) => `
+          <div class="session-entry">
+            <div class="row1">
+              <span class="time">${fmtTime(c.time)}</span>
+              <span class="kind ${escapeHtml(c.kind)}">${escapeHtml(c.kind)}</span>
+              <span class="sha">${escapeHtml(c.sha)}</span>
+            </div>
+            <div class="msg">${escapeHtml(c.message)}</div>
+          </div>`).join('')
+      }</div>`;
+    }
+
+    function parseUnifiedDiff(diffText) {
+      const result = {};
+      if (!diffText) return result;
+      const lines = diffText.split('\n');
+      let currentFile = null;
+      let hunkIdx = -1;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.startsWith('diff --git ')) {
+          const m = line.match(/^diff --git a\/(.*?) b\/(.+)$/);
+          const fp = (m && m[2]) || null;
+          if (fp) {
+            currentFile = fp;
+            result[currentFile] = { added: 0, removed: 0, lines: [], hunkCount: 0 };
+            hunkIdx = -1;
+          }
+          continue;
+        }
+        if (!currentFile) continue;
+        if (line.startsWith('index ') || line.startsWith('--- ') || line.startsWith('+++ ') ||
+            line.startsWith('new file mode') || line.startsWith('deleted file mode') ||
+            line.startsWith('similarity index') || line.startsWith('rename ') || line.startsWith('Binary files')) {
+          continue;
+        }
+        if (line.startsWith('@@')) {
+          hunkIdx++;
+          result[currentFile].hunkCount = hunkIdx + 1;
+          result[currentFile].lines.push({ kind: 'hunk', text: line, hunkIndex: hunkIdx });
+          continue;
+        }
+        if (line.startsWith('+')) {
+          result[currentFile].added++;
+          result[currentFile].lines.push({ kind: 'add', text: line, hunkIndex: hunkIdx });
+        } else if (line.startsWith('-')) {
+          result[currentFile].removed++;
+          result[currentFile].lines.push({ kind: 'del', text: line, hunkIndex: hunkIdx });
+        } else {
+          result[currentFile].lines.push({ kind: 'context', text: line, hunkIndex: hunkIdx });
+        }
+      }
+      return result;
+    }
+
+    function renderDiffLine(line, filePath) {
+      if (line.kind === 'hunk') {
+        return `<div class="diff-line hunk">
+          <span class="hunk-text">${escapeHtml(line.text)}</span>
+          <button class="hunk-revert-btn"
+                  data-revert-hunk="${escapeHtml(filePath)}"
+                  data-hunk-index="${line.hunkIndex}"
+                  title="revert just this hunk">revert hunk</button>
+        </div>`;
+      }
+      return `<div class="diff-line ${line.kind}">${escapeHtml(line.text)}</div>`;
+    }
+
+    function showConfirmModal(desc, onConfirm) {
+      const backdrop = $('confirm-modal');
+      $('modal-desc').innerHTML = desc;
+      backdrop.classList.add('show');
+
+      function close() {
+        backdrop.classList.remove('show');
+        backdrop.removeEventListener('click', onBackdrop);
+        document.removeEventListener('keydown', onKey);
+      }
+      function onKey(e) { if (e.key === 'Escape') close(); }
+      function onBackdrop(e) { if (e.target === backdrop) close(); }
+
+      document.addEventListener('keydown', onKey);
+      backdrop.addEventListener('click', onBackdrop);
+      $('modal-cancel').onclick = close;
+      $('modal-confirm').onclick = () => { close(); onConfirm(); };
+      $('modal-confirm').focus();
+    }
+
+    async function revertFile(relPath) {
+      try {
+        const res = await fetch(`${SERVER_URL}/diff/revert-file`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ filePath: relPath }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          flashError(body.error || `revert failed (${res.status})`);
+          return;
+        }
+        // Force a full reload so any structural reverts don't trip Next's hydration
+        reloadIframe();
+        if (state.currentFilePath && state.currentFilePath.endsWith(relPath)) {
+          loadFile(state.currentFilePath);
+        }
+        await maybeAutoCommit('revert-file', { filePath: relPath });
+      } catch (e) {
+        flashError(e.message || 'revert failed');
+      }
+    }
+
+    async function revertHunk(relPath, hunkIndex) {
+      try {
+        const res = await fetch(`${SERVER_URL}/diff/revert-hunk`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ filePath: relPath, hunkIndex }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          flashError(body.error || `revert hunk failed (${res.status})`);
+          return;
+        }
+        // The file just changed but we don't know what part. Refresh inspector
+        // for the currently loaded file, and reload iframe in case the change
+        // was structural (text/order).
+        if (state.currentFilePath && state.currentFilePath.endsWith(relPath)) {
+          loadFile(state.currentFilePath);
+        }
+        reloadIframe();
+        await maybeAutoCommit('revert-hunk', { filePath: relPath, hunkIndex });
+      } catch (e) {
+        flashError(e.message || 'revert hunk failed');
+      }
+    }
+
+    async function discardAll() {
+      if (!confirm('Discard ALL pending changes and reset to HEAD?')) return;
+      try {
+        const res = await fetch(`${SERVER_URL}/diff/discard-all`, { method: 'POST' });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          flashError(body.error || 'discard failed');
+          return;
+        }
+      } catch (e) {
+        flashError(e.message || 'discard failed');
+      }
+    }
+
+    async function commitChanges() {
+      const msg = $('commit-message').value.trim();
+      if (!msg) { flashError('commit message required'); return; }
+      try {
+        const res = await fetch(`${SERVER_URL}/diff/commit`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ message: msg }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          flashError(body.error || `commit failed (${res.status})`);
+          return;
+        }
+        $('commit-message').value = '';
+        if (body.sha) sessionLog.record(body.sha, msg, 'manual');
+        flashStatus('connected');
+      } catch (e) {
+        flashError(e.message || 'commit failed');
+      }
+    }
+
+    function bindDiffControls() {
+      document.querySelectorAll('.right-tabs button[data-tab]').forEach((btn) => {
+        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+      });
+      $('diff-refresh-btn').addEventListener('click', fetchDiff);
+      $('diff-discard-btn').addEventListener('click', discardAll);
+      $('diff-commit-btn').addEventListener('click', commitChanges);
+      $('commit-message').addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') commitChanges();
+      });
+      $('auto-commit-toggle').addEventListener('click', toggleAutoCommit);
+      setAutoCommit(UI.autoCommit);
+    }
+
+    // ---------- Bootstrap ----------
+    function init() {
+      loadUiPrefs();
+      setUiTheme(UI.theme);
+      $('theme-toggle').addEventListener('click', toggleUiTheme);
+
+      // Panel toggles
+      $('left-toggle').innerHTML = ICONS.panelLeft;
+      $('right-toggle').innerHTML = ICONS.panelRight;
+      applyRightWidth(UI.rightWidth);
+      setupRightResize();
+      setPanel('left', UI.panels.left);
+      setPanel('right', UI.panels.right);
+      $('left-toggle').addEventListener('click', () => togglePanel('left'));
+      $('right-toggle').addEventListener('click', () => togglePanel('right'));
+
+      // Keyboard shortcuts (skip when typing in inputs)
+      document.addEventListener('keydown', (e) => {
+        const tag = e.target && e.target.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ||
+            (e.target && e.target.isContentEditable)) return;
+        if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
+          const k = e.key.toLowerCase();
+          if (k === 'b') { e.preventDefault(); togglePanel('left'); }
+          else if (k === 'j') { e.preventDefault(); togglePanel('right'); }
+        }
+      });
+
+      $('app-iframe').src = APP_URL;
+      bindDiffControls();
+      connectWS();
+      fetchFiles();
+      fetchTheme();
+      fetchDiff();
+    }
+    init();
+  </script>
+
+  <div class="modal-backdrop" id="confirm-modal">
+    <div class="modal">
+      <div class="modal-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+      </div>
+      <div class="modal-title">Revert changes</div>
+      <div class="modal-desc" id="modal-desc"></div>
+      <div class="modal-actions">
+        <button id="modal-cancel">Cancel</button>
+        <button id="modal-confirm" class="modal-danger">Revert</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
