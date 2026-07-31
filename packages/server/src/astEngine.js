@@ -61,21 +61,35 @@ function findClassNameAttr(node) {
   return null;
 }
 
-function classifyClassName(attr) {
+function classifyClassName(attr, code) {
   if (!attr) return { kind: 'none', value: null };
   if (!attr.value) return { kind: 'boolean', value: null };
   if (attr.value.type === 'StringLiteral') {
     return { kind: 'string', value: attr.value.value, node: attr.value };
   }
-  if (
-    attr.value.type === 'JSXExpressionContainer' &&
-    attr.value.expression.type === 'StringLiteral'
-  ) {
-    return {
-      kind: 'string',
-      value: attr.value.expression.value,
-      node: attr.value.expression,
-    };
+  if (attr.value.type === 'JSXExpressionContainer') {
+    const expr = attr.value.expression;
+    if (expr.type === 'StringLiteral') {
+      return { kind: 'string', value: expr.value, node: expr };
+    }
+    // Template literal: `static classes ${expr} more`. The static class text
+    // in the quasis is editable; the ${...} interpolations are preserved
+    // verbatim on write-back. We surface the flattened static classes as the
+    // editable value and keep the TemplateLiteral node for reconstruction.
+    if (expr.type === 'TemplateLiteral') {
+      const staticValue = expr.quasis
+        .map((q) => (q.value.cooked != null ? q.value.cooked : q.value.raw))
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      let dynamicParts = null;
+      if (code != null) {
+        dynamicParts = expr.expressions.map(
+          (e) => '${' + code.slice(e.start, e.end) + '}'
+        );
+      }
+      return { kind: 'template', value: staticValue, node: expr, dynamicParts };
+    }
   }
   return { kind: 'expression', value: null, node: attr.value };
 }
@@ -148,7 +162,7 @@ function extractElements(filePath, sourceOverride) {
 
       const framelabId = buildFramelabId(opening, filePath);
       const classNameAttr = findClassNameAttr(opening);
-      const cls = classifyClassName(classNameAttr);
+      const cls = classifyClassName(classNameAttr, code);
       const text = classifyChildren(path.node);
 
       elements.push({
@@ -159,6 +173,7 @@ function extractElements(filePath, sourceOverride) {
           typeof opening.start === 'number' ? opening.start : opening.loc.start.column,
         className: cls.value,
         classNameKind: cls.kind,
+        classNameDynamic: cls.dynamicParts || null,
         textContent: text.value,
         textKind: text.kind,
       });
@@ -200,8 +215,13 @@ function getClassName(filePath, framelabId) {
   const found = findElementByFramelabId(filePath, framelabId);
   if (!found) return { found: false };
   const attr = findClassNameAttr(found.node);
-  const cls = classifyClassName(attr);
-  return { found: true, kind: cls.kind, className: cls.value };
+  const cls = classifyClassName(attr, found.code);
+  return {
+    found: true,
+    kind: cls.kind,
+    className: cls.value,
+    dynamicParts: cls.dynamicParts || null,
+  };
 }
 
 function updateClassName(filePath, framelabId, newClassName) {
@@ -211,7 +231,7 @@ function updateClassName(filePath, framelabId, newClassName) {
     return { ok: false, reason: 'element-not-found' };
   }
   const attr = findClassNameAttr(found.node);
-  const cls = classifyClassName(attr);
+  const cls = classifyClassName(attr, code);
 
   if (cls.kind === 'expression') {
     return { ok: false, reason: 'className-not-static' };
@@ -224,6 +244,16 @@ function updateClassName(filePath, framelabId, newClassName) {
     const valueStart = attr.value.start;
     const valueEnd = attr.value.end;
     updated = code.slice(0, valueStart) + replacement + code.slice(valueEnd);
+  } else if (cls.kind === 'template') {
+    // Rewrite only the static class text, preserving each ${...} interpolation
+    // verbatim. Static classes come first, then the interpolations in order —
+    // for the common `<classes> ${expr}` shape this reproduces the original
+    // structure exactly; the interpolations are never parsed or altered.
+    const tpl = cls.node;
+    const exprs = tpl.expressions.map((e) => '${' + code.slice(e.start, e.end) + '}');
+    const staticClasses = String(newClassName == null ? '' : newClassName).trim();
+    const rebuilt = '`' + [staticClasses, ...exprs].filter(Boolean).join(' ') + '`';
+    updated = code.slice(0, tpl.start) + rebuilt + code.slice(tpl.end);
   } else {
     const insertAt = found.node.name.end;
     updated =

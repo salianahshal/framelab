@@ -271,6 +271,9 @@ async function main() {
   await server3.close();
   console.log('  HTTP /move applied + reverted  OK');
 
+  divider('astEngine: template literal className (edit static, preserve ${...})');
+  testTemplateLiteralClassName();
+
   divider('gitEngine.revertHunk: temp repo, multi-hunk revert');
   await testRevertHunk();
 
@@ -284,6 +287,66 @@ async function main() {
   await testLoadTsConfig();
 
   divider('all server tests passed');
+}
+
+function testTemplateLiteralClassName() {
+  const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelab-tpl-'));
+  const file = path.join(dir, 'Tpl.tsx');
+  const original = [
+    "const focusRing = 'ring-2 ring-offset-2';",
+    'export default function C() {',
+    '  return (',
+    '    <div>',
+    '      <a className={`flex items-center px-3 text-sm ${focusRing}`}>x</a>',
+    "      <button className={cn('p-2', active && 'bg-red')}>y</button>",
+    '    </div>',
+    '  );',
+    '}',
+    '',
+  ].join('\n');
+  fs.writeFileSync(file, original, 'utf8');
+
+  const els = astEngine.extractElements(file).elements;
+  const a = els.find((e) => e.tagName === 'a');
+  const button = els.find((e) => e.tagName === 'button');
+
+  assert(a.classNameKind === 'template', `expected template kind, got ${a.classNameKind}`);
+  assert(
+    a.className === 'flex items-center px-3 text-sm',
+    `static classes wrong: "${a.className}"`
+  );
+  assert(
+    Array.isArray(a.classNameDynamic) && a.classNameDynamic[0] === '${focusRing}',
+    `dynamic parts wrong: ${JSON.stringify(a.classNameDynamic)}`
+  );
+  console.log('  extract: <a> is kind=template, static + ${focusRing} split  OK');
+
+  // cn(...) must still be treated as an opaque expression (not editable).
+  assert(
+    button.classNameKind === 'expression',
+    `cn() should be expression, got ${button.classNameKind}`
+  );
+  console.log('  extract: cn() button stays kind=expression  OK');
+
+  // Edit the static classes; the ${focusRing} interpolation must survive verbatim.
+  const res = astEngine.updateClassName(file, a.framelabId, 'flex items-center px-4 text-base');
+  assert(res.ok, `update failed: ${JSON.stringify(res)}`);
+  const after = fs.readFileSync(file, 'utf8');
+  const expectedLine = '<a className={`flex items-center px-4 text-base ${focusRing}`}>';
+  assert(after.includes(expectedLine), `rewrite wrong:\n${after}`);
+  assert(after.includes('${focusRing}'), 'interpolation lost');
+  console.log('  update: static classes rewritten, ${focusRing} preserved  OK');
+
+  // Re-extract and confirm it is still a clean template with new static value.
+  const a2 = astEngine.extractElements(file).elements.find((e) => e.tagName === 'a');
+  assert(
+    a2.classNameKind === 'template' && a2.className === 'flex items-center px-4 text-base',
+    `re-extract wrong: ${a2.classNameKind} "${a2.className}"`
+  );
+  console.log('  round-trip: re-extracts as template with updated classes  OK');
+
+  fs.rmSync(dir, { recursive: true, force: true });
 }
 
 async function testLoadTsConfig() {
