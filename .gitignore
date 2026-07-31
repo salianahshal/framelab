@@ -2,3 +2,9 @@ node_modules/
 .next/
 .DS_Store
 *.log
+
+# Local Claude Code tooling (personal, not part of the project)
+.claude/
+
+# TypeScript incremental build state
+*.tsbuildinfo
