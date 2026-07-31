@@ -122,6 +122,35 @@ const RUNTIME_SOURCE = `(function(){
     if (e.key === 'Escape' && drag && drag.started) endDrag(false);
   }, true);
 
+  // ---------- Selection tracking ----------
+  // The parent draws the selection outline from a rect captured at click time.
+  // When the app scrolls or the viewport resizes inside the iframe, that rect
+  // goes stale and the outline appears "stuck". Re-post the selected element's
+  // current rect (rAF-throttled) so the parent can keep the outline glued to it.
+  var selectedEl = null;
+  var rectUpdateQueued = false;
+  function flushRectUpdate(){
+    rectUpdateQueued = false;
+    if (!selectedEl) return;
+    if (selectedEl.isConnected === false) { selectedEl = null; return; }
+    post({
+      type: 'FRAMELAB_RECT_UPDATE',
+      framelabId: selectedEl.getAttribute('data-framelab-id'),
+      rect: rectOf(selectedEl)
+    });
+  }
+  function scheduleRectUpdate(){
+    if (rectUpdateQueued || !selectedEl) return;
+    rectUpdateQueued = true;
+    var raf = window.requestAnimationFrame || window.setTimeout;
+    raf(flushRectUpdate, 0);
+  }
+  // Guarded: the plugin's test sandbox has no window.addEventListener.
+  if (window.addEventListener) {
+    window.addEventListener('scroll', scheduleRectUpdate, true);
+    window.addEventListener('resize', scheduleRectUpdate, true);
+  }
+
   document.addEventListener('click', function(e){
     if (window.__framelab_suppress_next_click) {
       window.__framelab_suppress_next_click = false;
@@ -133,6 +162,7 @@ const RUNTIME_SOURCE = `(function(){
     if (!el) return;
     e.preventDefault();
     e.stopPropagation();
+    selectedEl = el;
     post({
       type: 'FRAMELAB_CLICK',
       framelabId: el.getAttribute('data-framelab-id'),

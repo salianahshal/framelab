@@ -1418,7 +1418,7 @@
     }
 
     // ---------- Iframe + selection overlay ----------
-    function showOverlay(rect) {
+    function showOverlay(rect, instant) {
       const overlay = $('select-overlay');
       const shell = $('iframe-shell');
       const iframe = $('app-iframe');
@@ -1426,6 +1426,9 @@
       const ib = iframe.getBoundingClientRect();
       const offsetLeft = ib.left - sb.left;
       const offsetTop = ib.top - sb.top;
+      // During scroll/resize tracking we reposition every frame; the ease-out
+      // transition would make the outline lag behind, so snap it instantly.
+      overlay.style.transition = instant ? 'none' : '';
       overlay.style.left = (offsetLeft + rect.left) + 'px';
       overlay.style.top = (offsetTop + rect.top) + 'px';
       overlay.style.width = rect.width + 'px';
@@ -1435,12 +1438,25 @@
     function hideOverlay() {
       $('select-overlay').classList.remove('show');
     }
+    // The iframe app scrolled/resized: re-glue the outline to the selected
+    // element's new position. Only track an outline that's already shown for
+    // the current selection — never resurrect a hidden or stale one.
+    function handleRectUpdate(framelabId, rect) {
+      if (!rect || !framelabId) return;
+      const overlay = $('select-overlay');
+      if (!overlay.classList.contains('show')) return;
+      if (state.selectedDomId !== framelabId) return;
+      state.selectedRect = rect;
+      showOverlay(rect, true);
+    }
 
     window.addEventListener('message', (e) => {
       const data = e.data || {};
       switch (data.type) {
         case 'FRAMELAB_CLICK':
           handleIframeClick(data.framelabId, data.rect, data.computed); break;
+        case 'FRAMELAB_RECT_UPDATE':
+          handleRectUpdate(data.framelabId, data.rect); break;
         case 'FRAMELAB_DRAG_START':
           handleDragStart(data.sourceId); break;
         case 'FRAMELAB_DRAG_OVER':
@@ -1510,6 +1526,7 @@
           .find((x) => x.framelabId === targetId);
         state.selectedKey = null;
         state.selectedElement = null;
+        state.selectedDomId = null;
         state.selectedComputed = null;
         renderInspector();
         reloadIframe();
@@ -1572,6 +1589,7 @@
       state.selectedElement = el;
       state.selectedKey = selectionKey(el);
       state.selectedRect = rect;
+      state.selectedDomId = framelabId;
       state.selectedComputed = computed || null;
       renderElementList();
       renderInspector();
@@ -1621,9 +1639,10 @@
         </div>
         ${textContentSection(el)}
         <div class="raw-classname">
-          <div class="label">className</div>
+          <div class="label">className ${el.classNameKind === 'template' ? '<span class="badge">+ dynamic</span>' : ''}</div>
           <div class="value" id="raw-classname-value">${escapeHtml(el.className || '')}</div>
           <div class="copy-hint" id="raw-classname-copy">copy</div>
+          ${el.classNameKind === 'template' ? `<div class="hint">editing the static classes — <span class="mono">${escapeHtml((el.classNameDynamic || ['${…}']).join(' '))}</span> is preserved</div>` : ''}
         </div>
         ${section('Background', sectionBackground(props))}
         ${section('Text', sectionText(props))}
