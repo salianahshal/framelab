@@ -1,7 +1,7 @@
 {
   "name": "@framelab/canvas",
   "version": "0.1.0",
-  "description": "Framelab canvas UI — static files served by @framelab/server.",
+  "description": "Framelab canvas UI \u2014 static files served by @framelab/server.",
   "license": "MIT",
   "author": "salianahshal2 <salianahshal21@gmail.com>",
   "repository": {
@@ -13,10 +13,26 @@
   "bugs": "https://github.com/salianahshal/framelab/issues",
   "files": [
     "index.html",
+    "app.js",
     "logo-dark-bg.svg",
     "logo-light-bg.svg"
   ],
   "publishConfig": {
     "access": "public"
+  },
+  "scripts": {
+    "test:e2e": "node test/e2e.js",
+    "test:live": "node test/live.js",
+    "test:agent": "node test/agent.js"
+  },
+  "keywords": [
+    "framelab",
+    "visual-editor",
+    "canvas",
+    "tailwind",
+    "nextjs"
+  ],
+  "engines": {
+    "node": ">=18"
   }
 }

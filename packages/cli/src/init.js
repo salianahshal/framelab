@@ -75,12 +75,33 @@ async function init(args) {
     t.ok('Added NEXT_PUBLIC_FRAMELAB=true to .env.development');
   }
 
-  // 3. Print next steps
+  // 3. Warn about an incompatible @babel/runtime
+  // Next.js 14's Babel path imports `@babel/runtime/regenerator`, a subpath
+  // that 8.x removed. Installing it unpinned breaks the dev server with an
+  // ERR_PACKAGE_PATH_NOT_EXPORTED that points nowhere near the real cause.
+  const runtimePkg = path.join(cwd, 'node_modules', '@babel', 'runtime', 'package.json');
+  if (fs.existsSync(runtimePkg)) {
+    try {
+      const version = JSON.parse(fs.readFileSync(runtimePkg, 'utf8')).version || '';
+      const major = Number(version.split('.')[0]);
+      if (major >= 8) {
+        t.warn(`@babel/runtime ${version} is installed, but Next.js needs the 7.x line.`);
+        t.info('Your dev server will fail to compile until you downgrade:');
+        console.log('    ' + t.hl("npm install --save-dev '@babel/runtime@^7'"));
+        console.log();
+      } else {
+        t.ok(`@babel/runtime ${version} is compatible`);
+      }
+    } catch {}
+  }
+
+  // 4. Print next steps
   console.log();
   console.log(t.bold('Next steps:'));
   console.log();
   console.log('  ' + t.dim('1. Install the runtime dependencies:'));
-  console.log('     ' + t.hl('npm install --save-dev @framelab/babel-plugin @babel/runtime'));
+  console.log('     ' + t.hl("npm install --save-dev @framelab/babel-plugin '@babel/runtime@^7'"));
+  console.log('     ' + t.dim('(Next.js 14 needs @babel/runtime 7.x; 8.x dropped a subpath it imports)'));
   console.log();
   console.log('  ' + t.dim('2. Start your dev server (in one terminal):'));
   console.log('     ' + t.hl('npm run dev'));

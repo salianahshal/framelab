@@ -24,7 +24,8 @@
   },
   "scripts": {
     "start": "node bin/framelab-server.js",
-    "test": "node test/run.js"
+    "test": "node test/parser.js && node test/ast.js && node test/server.js && node test/run.js",
+    "prepublishOnly": "npm test"
   },
   "dependencies": {
     "@babel/generator": "^7.24.7",
@@ -34,11 +35,20 @@
     "@framelab/canvas": "^0.1.0",
     "chokidar": "^3.6.0",
     "cors": "^2.8.5",
-    "express": "^4.19.2",
+    "express": "^5.2.1",
     "jiti": "^2.4.0",
     "ws": "^8.17.1"
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "keywords": [
+    "framelab",
+    "tailwind",
+    "jsx",
+    "ast",
+    "visual-editor",
+    "nextjs",
+    "dev-server"
+  ]
 }

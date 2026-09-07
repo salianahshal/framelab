@@ -17,6 +17,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
 const readline = require('readline');
 const detect = require('./detect');
 const snapshot = require('./snapshot');
@@ -77,6 +78,35 @@ function relPathFrom(rootDir, abs) {
   return rel.startsWith('..') ? abs : rel;
 }
 
+// Reach the canvas server, if one is running for this project. It is started
+// in a separate terminal, so its port comes from the session registry it writes.
+function canvasSession(rootDir) {
+  try {
+    const { session } = require('@framelab/server');
+    return session.read(rootDir);
+  } catch {
+    return null;
+  }
+}
+
+function getJson(port, urlPath, timeoutMs = 2500) {
+  return new Promise((resolve) => {
+    const req = http.get(
+      { host: '127.0.0.1', port, path: urlPath, timeout: timeoutMs },
+      (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
+          catch { resolve(null); }
+        });
+      }
+    );
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+  });
+}
+
 // ---------- Tools ----------
 
 function buildTools(rootDir) {
@@ -111,6 +141,23 @@ function buildTools(rootDir) {
       },
     },
     {
+      name: 'get_selection',
+      description:
+        'Return the element the user currently has selected in the Framelab canvas — ' +
+        'what they are pointing at right now.\n\n' +
+        'Use this FIRST whenever the user says "this", "that button", "the header here", ' +
+        'or otherwise refers to something on screen without naming a file. It saves ' +
+        'searching the codebase and removes the guesswork about which element they mean.\n\n' +
+        'Returns the exact source location (file and line), the framelabId to pass to ' +
+        'update_styles / update_text / snapshot, the parsed Tailwind props, the variant ' +
+        'map, the ancestor and child chain, and the element\'s computed style as rendered.\n\n' +
+        'It also returns `editingVariant`: if the user has a breakpoint or state tab open ' +
+        'in the inspector, they mean that variant. Pass the same `variants` to ' +
+        'update_styles so the edit lands where they are looking.\n\n' +
+        'Requires the canvas to be running (`npx framelab` in another terminal).',
+      inputSchema: { type: 'object', properties: {} },
+    },
+    {
       name: 'get_element',
       description:
         'Get full details for one element: tagName, line, className, textContent, ' +
@@ -138,18 +185,24 @@ function buildTools(rootDir) {
     {
       name: 'update_styles',
       description:
-        'Edit Tailwind classes on an element via structured props. The change is ' +
-        'byte-surgical — only the className value changes, every other byte of the file ' +
-        'is preserved exactly. No formatting churn.\n\n' +
+        'Edit Tailwind classes on an element via structured props. Only the tokens ' +
+        'for the properties you name are replaced: class order, unrecognised ' +
+        'utilities, responsive variants and comments are all preserved byte for byte.\n\n' +
         'Example props:\n' +
-        '  { "background": "blue-600" }              → adds bg-blue-600\n' +
-        '  { "background": "[#ff0000]" }             → adds bg-[#ff0000] (arbitrary)\n' +
+        '  { "background": "blue-600" }              → bg-blue-600\n' +
+        '  { "background": "[#ff0000]" }             → bg-[#ff0000] (arbitrary value)\n' +
         '  { "padding": { "top": "4", "right": "6", "bottom": "4", "left": "6" } }\n' +
-        '  { "rounded": "lg", "borderWidth": "2", "borderColor": "zinc-200" }\n' +
-        '  { "display": "flex", "flexDirection": "col", "gap": "4" }\n\n' +
-        'Set a value to null to remove that style. ' +
-        'Call list_design_tokens first to learn the project\'s token names. ' +
-        'Refuses elements with non-static className expressions (cn(), template literals).',
+        '  { "borderRadius": "lg", "borderWidth": "2", "borderColor": "zinc-200" }\n' +
+        '  { "display": "flex", "flexDirection": "col", "gap": "4" }\n' +
+        '  { "textAlign": "center", "fontSize": "lg", "boxShadow": "card" }\n\n' +
+        'Set a value to null to remove that style.\n\n' +
+        'Pass `variants` to target a responsive or state variant instead of the base ' +
+        'styles: variants ["md"] writes md:*, ["hover"] writes hover:*, ["md","hover"] ' +
+        'writes md:hover:*. Base styles are left alone.\n\n' +
+        'Call list_design_tokens first and prefer the project\'s own token names. ' +
+        'Works on plain strings, template literals (interpolations are preserved in ' +
+        'place) and cn()/clsx()/twMerge() calls (the first string argument is edited). ' +
+        'Refuses ternaries and other expressions it cannot rewrite safely.',
       inputSchema: {
         type: 'object',
         required: ['framelabId', 'props'],
@@ -158,6 +211,19 @@ function buildTools(rootDir) {
           props: {
             type: 'object',
             description: 'Tailwind property patch (see tool description for examples)',
+          },
+          variants: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Variant prefixes to write under, e.g. ["md"] or ["md","hover"]. Omit for base styles.',
+          },
+          preview: {
+            type: 'boolean',
+            description: 'Return the resulting className without writing the file. Use it to check your work first.',
+          },
+          force: {
+            type: 'boolean',
+            description: 'Write values that are not in the project design system anyway. Prefer a real token or a bracketed arbitrary value.',
           },
         },
       },
@@ -188,6 +254,42 @@ function buildTools(rootDir) {
           sourceId: { type: 'string', description: 'framelabId of the element to move' },
           targetId: { type: 'string', description: 'framelabId of the sibling to move next to' },
           position: { type: 'string', enum: ['before', 'after'] },
+        },
+      },
+    },
+    {
+      name: 'delete_element',
+      description:
+        'Remove a JSX element and everything inside it from the source. The line ' +
+        'break and indentation that introduced it go too, so no blank line is left ' +
+        'behind.\n\n' +
+        'Returns the removed source text along with `parentKey` and `index`, which ' +
+        'restore_element takes to put it back exactly where it was. Keep them if ' +
+        'there is any chance the user wants it undone.\n\n' +
+        'Refuses the outermost element of a component, which would leave the ' +
+        'component returning nothing.',
+      inputSchema: {
+        type: 'object',
+        required: ['framelabId'],
+        properties: {
+          framelabId: { type: 'string', description: 'From find_elements' },
+        },
+      },
+    },
+    {
+      name: 'restore_element',
+      description:
+        'Undo a delete_element by re-inserting the source it returned at the same ' +
+        'position. Pass back the `filePath`, `parentKey`, `index` and `removed` ' +
+        'values from that call; the file is restored byte for byte.',
+      inputSchema: {
+        type: 'object',
+        required: ['filePath', 'parentKey', 'index', 'source'],
+        properties: {
+          filePath: { type: 'string', description: 'File the element was deleted from' },
+          parentKey: { type: 'string', description: 'parentKey from delete_element' },
+          index: { type: 'number', description: 'index from delete_element' },
+          source: { type: 'string', description: 'removed source from delete_element' },
         },
       },
     },
@@ -244,6 +346,19 @@ function buildHandlers(rootDir) {
   // even when the file change happens mid-session.
   let lastWriteAt = 0;
   const HMR_SETTLE_MS = 1500;
+  // Project token names make class parsing exact (`shadow-card` is a shadow,
+  // not junk), so load them once and reuse.
+  let themeTokensCache;
+  async function loadThemeTokens() {
+    if (themeTokensCache !== undefined) return themeTokensCache;
+    try {
+      const loaded = await theme.loadTheme(rootDir);
+      themeTokensCache = (loaded && loaded.tokens) || null;
+    } catch {
+      themeTokensCache = null;
+    }
+    return themeTokensCache;
+  }
   async function waitForHmrSettle() {
     const since = Date.now() - lastWriteAt;
     if (since >= 0 && since < HMR_SETTLE_MS) {
@@ -299,16 +414,47 @@ function buildHandlers(rootDir) {
       return { count: out.length, truncated: out.length >= limit, elements: out };
     },
 
+    get_selection: async () => {
+      const info = canvasSession(rootDir);
+      if (!info) {
+        return {
+          selected: false,
+          reason: 'canvas-not-running',
+          hint: 'No Framelab canvas is running for this project. Ask the user to run ' +
+                '`npx framelab` in another terminal, then click the element they mean.',
+        };
+      }
+      const payload = await getJson(info.port, '/selection');
+      if (!payload) {
+        return {
+          selected: false,
+          reason: 'canvas-unreachable',
+          hint: `The canvas server on port ${info.port} did not respond. It may have just exited.`,
+        };
+      }
+      if (!payload.selected) return payload;
+      return {
+        ...payload,
+        next: 'Pass element.framelabId to update_styles, update_text or snapshot. ' +
+              'If editingVariant.prefix is set, pass those variants to update_styles.',
+      };
+    },
+
     get_element: async ({ framelabId }) => {
       const filePath = filePathFromFramelabId(framelabId);
       const { elements } = ast.extractElements(filePath);
       const el = elements.find((e) => e.framelabId === framelabId);
       if (!el) throw new Error(`Element not found in source: ${framelabId}`);
-      const parsed = el.className ? tailwind.parseClassName(el.className) : null;
+      const themeTokens = await loadThemeTokens();
+      const parsed = el.className
+        ? tailwind.parseClassName(el.className, themeTokens ? { theme: themeTokens } : undefined)
+        : null;
       return {
         ...el,
         file: relPathFrom(rootDir, filePath),
-        parsedProps: parsed,
+        parsedProps: parsed ? { props: parsed.props, unknown: parsed.unknown } : null,
+        variants: parsed ? parsed.variants : [],
+        variantProps: parsed ? parsed.variantProps : {},
       };
     },
 
@@ -316,14 +462,50 @@ function buildHandlers(rootDir) {
       return await theme.loadTheme(rootDir);
     },
 
-    update_styles: async ({ framelabId, props }) => {
+    update_styles: async ({ framelabId, props, variants, preview, force }) => {
       const filePath = filePathFromFramelabId(framelabId);
       const current = ast.getClassName(filePath, framelabId);
       if (!current.found) throw new Error(`Element not found: ${framelabId}`);
-      if (current.kind === 'expression') {
-        throw new Error('className uses an expression (cn()/template literal); cannot edit programmatically.');
+      if (!current.editable) {
+        throw new Error(
+          'className is an expression Framelab will not rewrite (a ternary or a ' +
+          'variable). Edit this element in the source directly.'
+        );
       }
-      const nextClassName = tailwind.mergeProps(current.className || '', props || {});
+      const themeTokens = await loadThemeTokens();
+      const opts = themeTokens ? { theme: themeTokens } : undefined;
+      const edits = Object.entries(props || {}).map(([prop, value]) => ({
+        prop: tailwind.PROP_ALIASES[prop] || prop,
+        value,
+        variants: Array.isArray(variants) ? variants : [],
+      }));
+
+      // The project's own scales are the schema. A value outside them would
+      // compile to a class Tailwind silently drops, so it is refused with the
+      // nearest real names attached rather than written and forgotten.
+      const problems = tailwind.validateEdits(edits, themeTokens);
+      if (problems.length && !force) {
+        const lines = problems.map((p) => '  - ' + p.message);
+        throw new Error(
+          'These values are not part of the project\'s design system:\n' +
+          lines.join('\n') +
+          '\n\nUse one of the suggested tokens, an arbitrary value in brackets ' +
+          '(e.g. "[#ff0000]" or "[13px]") if you genuinely mean to step off the ' +
+          'scale, or pass force: true to write it anyway.'
+        );
+      }
+
+      const nextClassName = tailwind.applyEdits(current.className || '', edits, opts);
+
+      if (preview) {
+        return {
+          preview: true,
+          file: relPathFrom(rootDir, filePath),
+          previousClassName: current.className,
+          nextClassName,
+          note: 'Nothing was written. Call again without preview to apply.',
+        };
+      }
       const result = ast.updateClassName(filePath, framelabId, nextClassName);
       if (!result.ok) throw new Error(`Update failed: ${result.reason}`);
       // Mark that we just wrote, so the next snapshot waits a beat for HMR.
@@ -355,6 +537,39 @@ function buildHandlers(rootDir) {
       if (!result.ok) throw new Error(`Move failed: ${result.reason}`);
       lastWriteAt = Date.now();
       return { ok: true, file: relPathFrom(rootDir, filePath), noChange: !!result.noChange };
+    },
+
+    delete_element: async ({ framelabId }) => {
+      const filePath = filePathFromFramelabId(framelabId);
+      const result = ast.deleteElement(filePath, framelabId);
+      if (!result.ok) {
+        if (result.reason === 'cannot-delete-root') {
+          throw new Error(
+            'That is the outermost element of the component; deleting it would ' +
+            'leave the component returning nothing. Remove the component itself instead.'
+          );
+        }
+        throw new Error(`Delete failed: ${result.reason}`);
+      }
+      lastWriteAt = Date.now();
+      return {
+        ok: true,
+        file: relPathFrom(rootDir, filePath),
+        filePath,
+        tagName: result.tagName,
+        removed: result.removed,
+        parentKey: result.parentKey,
+        index: result.index,
+        restoreWith: 'restore_element',
+      };
+    },
+
+    restore_element: async ({ filePath, parentKey, index, source }) => {
+      const abs = path.isAbsolute(filePath) ? filePath : path.resolve(rootDir, filePath);
+      const result = ast.insertElement(abs, parentKey, Number(index) || 0, source);
+      if (!result.ok) throw new Error(`Restore failed: ${result.reason}`);
+      lastWriteAt = Date.now();
+      return { ok: true, file: relPathFrom(rootDir, abs) };
     },
 
     commit: async ({ message }) => {
@@ -520,7 +735,8 @@ Cursor, or any MCP-aware client like:
   }
 
 Tools exposed: list_files, find_elements, get_element,
-list_design_tokens, update_styles, update_text, move_sibling, commit, get_diff.
+list_design_tokens, update_styles, update_text, move_sibling, delete_element,
+restore_element, commit, get_diff, snapshot.
 `);
 }
 

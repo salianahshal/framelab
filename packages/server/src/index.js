@@ -6,4 +6,5 @@ module.exports = {
   tailwindParser: require('./tailwindParser'),
   themeEngine: require('./themeEngine'),
   gitEngine: require('./gitEngine'),
+  session: require('./session'),
 };

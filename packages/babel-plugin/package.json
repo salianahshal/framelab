@@ -19,7 +19,8 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node test/run.js"
+    "test": "node test/run.js",
+    "prepublishOnly": "npm test"
   },
   "peerDependencies": {
     "@babel/core": "^7.0.0"
@@ -35,5 +36,14 @@
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "keywords": [
+    "framelab",
+    "babel-plugin",
+    "jsx",
+    "react",
+    "nextjs",
+    "visual-editor",
+    "source-maps"
+  ]
 }

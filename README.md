@@ -28,12 +28,16 @@ a cloud sandbox, export it back later), or they write CSS you didn't ask for.
 Framelab does neither.
 
 - **Local only.** No account, no upload, no sandbox. The CLI talks to your dev
-  server on localhost and edits files in place.
-- **Byte-surgical diffs.** Only the `className` value changes. Your formatting,
-  comments, and import order survive untouched — `git diff` stays reviewable.
+  server on localhost and edits files in place. The sync server binds to
+  loopback and refuses cross-origin requests and paths outside your project.
+- **Byte-surgical diffs.** Only the tokens you actually changed are rewritten.
+  Class order, unrecognised utilities, variants, comments and import order all
+  survive untouched — `git diff` stays reviewable.
 - **Theme-aware.** Colors, spacing, and radii come from your own
   `tailwind.config.{js,ts}`, so you edit in `brand` and `card`, not `#6e56cf`
   and `14px`.
+- **Responsive and state styles are values, not strings.** Pick `md` or `hover`
+  in the inspector and edit that variant directly; the base styles stay put.
 - **Your git workflow, unchanged.** Changes land as ordinary working-tree edits.
   Review them, revert a hunk, or commit them like anything else.
 
@@ -45,7 +49,7 @@ Framelab attaches to a dev server you're already running.
 cd your-next-app
 
 npx framelab init          # detect the project, write babel.config.js + .env wiring
-npm install --save-dev @framelab/babel-plugin @babel/runtime
+npm install --save-dev @framelab/babel-plugin '@babel/runtime@^7'
 
 npm run dev                # terminal 1 — your app
 npx framelab               # terminal 2 — the canvas
@@ -96,10 +100,25 @@ of letting the model guess at class strings.
 }
 ```
 
-Nine tools are exposed — `find_elements`, `get_element`, `list_design_tokens`,
-`update_styles`, `update_text`, `move_sibling`, `list_files`, `commit`, and
-`get_diff`. Run the canvas at the same time and you'll watch the model's edits
+Thirteen tools are exposed — `get_selection`, `list_files`, `find_elements`,
+`get_element`, `list_design_tokens`, `update_styles`, `update_text`,
+`move_sibling`, `delete_element`, `restore_element`, `commit`, `get_diff`, and
+`snapshot`. Run the canvas at the same time and you'll watch the model's edits
 land live.
+
+Two of those change how it feels to work with an agent:
+
+- **`get_selection`** answers "what is the user pointing at?". Click an element
+  in the canvas, then say "make this bigger" — no file paths, no grepping, no
+  guessing which of the four buttons you meant. The agent gets the exact source
+  line, the parsed Tailwind values, the ancestor chain, and which breakpoint you
+  have open in the inspector.
+- **`update_styles` validates against your `tailwind.config`.** A model that
+  writes `bg-embr` gets *"not in this project's colour palette. Did you mean
+  ember?"* instead of a class Tailwind silently drops. Edits are structured
+  (`{prop, value, variants}`), so a model chooses values while Framelab renders
+  the class string — it cannot reorder your classes or emit one that fails to
+  parse.
 
 See **[MCP.md](packages/cli/MCP.md)** for client-by-client setup and the full
 tool reference.
@@ -127,6 +146,44 @@ stable id, which is what lets a click in the browser resolve back to a file and
 line. The server parses that file, edits the `className` node in the AST, and
 writes it back — touching nothing else.
 
+## Working with an AI agent
+
+Framelab knows two things no coding agent can work out on its own: which
+element you are looking at, and what your design system actually contains. Both
+are exposed over MCP.
+
+```
+  you click a button in the canvas
+             │
+             ▼
+     selection published to the sync server
+             │
+             │   get_selection
+             ▼
+  Claude Code / Cursor  ──  update_styles({ props, variants })
+                                        │
+                              validated against tailwind.config
+                                        ▼
+                              byte-surgical write to your source
+```
+
+If you'd rather paste into a chat window than wire up MCP, the inspector header
+has a copy button that puts the same context on your clipboard: file and line,
+the class string, the nesting, and the variant you're editing.
+
+## Keyboard
+
+| Key | Action |
+| --- | --- |
+| `Esc` | Deselect |
+| `↑` / `↓` | Select parent / first child |
+| `←` / `→` | Select previous / next sibling |
+| `Del` / `⌫` | Delete the selected element |
+| `⌘Z` / `⌘⇧Z` | Undo / redo an edit, a reorder, or a delete |
+| `⌘B` / `⌘J` | Toggle the left and right panels |
+
+Shortcuts work whether focus is in the canvas or in the preview.
+
 ## Packages
 
 | Package | Description |
@@ -135,6 +192,40 @@ writes it back — touching nothing else.
 | [`@framelab/server`](packages/server) | File watcher, AST writer, Tailwind theme/class parsing, git hunk revert, REST + WebSocket bridge |
 | [`@framelab/babel-plugin`](packages/babel-plugin) | Tags JSX elements with `data-framelab-id`; optionally injects the click runtime |
 | [`@framelab/canvas`](packages/canvas) | The browser canvas UI, served by the sync server |
+
+## What can be edited
+
+If you can see it on the canvas, you can generally edit it. The exception is a
+`className` built from an expression Framelab cannot rewrite without guessing at
+behaviour it can't see:
+
+| className shape | Editable |
+| --- | --- |
+| `className="p-4 flex"` | yes |
+| ``className={`p-4 ${ring}`}`` | yes — the `${…}` keeps its exact position |
+| `className={cn('p-4', active && 'bg-red')}` | yes — the first string argument |
+| `className={clsx(…)}` / `twMerge(…)` / `cva(…)` | yes |
+| `className={a ? 'p-2' : 'p-4'}` | no — refused, not guessed at |
+| `className={styles.root}` | no |
+
+Elements that can't be edited are marked with a lock in the layer tree and say
+so in the inspector, so it's never a silent failure. Text is editable whenever
+an element's children are plain text.
+
+## Deleting
+
+Select an element and press `Del`, or use the trash button in the inspector
+header. The element and everything inside it are removed, along with the line
+break and indentation that introduced it, so no blank line is left behind.
+Selection moves to the parent.
+
+Deleting removes real source code, so it is always recoverable: `⌘Z` puts the
+element back byte for byte at the same position, and the toast that appears
+offers the same undo. Deleting is refused on the outermost element of a
+component, which would leave the component returning nothing.
+
+Every write is re-parsed before it lands: if a change would break the file, it
+is refused and the file is left untouched.
 
 ## Requirements & current limits
 
@@ -145,6 +236,8 @@ writes it back — touching nothing else.
   Components are skipped, so those elements aren't clickable.
 - Framelab configures Babel, which means Next falls back from SWC to Babel in
   development. Your production build is unaffected.
+- Editing an element inside a reused component edits its **definition**, so the
+  change applies to every instance. The layer tree shows you where you are.
 
 ## Development
 
@@ -160,6 +253,20 @@ Or run both suites from the root:
 ```sh
 npm test
 ```
+
+`npm test` covers the Tailwind class model, the AST writer, the sync server's
+path and origin guards, and the babel plugin — no browser required.
+
+Two browser-level suites run separately (they need Chrome, or `CHROME_PATH`):
+
+```sh
+npm run test:e2e   --workspace @framelab/canvas  # canvas against a real sync server
+npm run test:live  --workspace @framelab/canvas  # plus a real Next.js dev server
+npm run test:agent --workspace @framelab/canvas  # canvas click -> MCP process -> source edit
+```
+
+`test:live` copies `examples/test-next-app` to a temp directory with its own
+dist dir, so it never collides with a dev server you already have running.
 
 [`examples/test-next-app`](examples/test-next-app) is a minimal Next.js 14 +
 Tailwind app used as the integration fixture. Its `tailwind.config.js` custom

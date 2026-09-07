@@ -310,6 +310,178 @@ cases.push({
   },
 });
 
+
+// ---------------------------------------------------------------------------
+// Runtime behaviour beyond the click: hover, click-out, canvas-driven select.
+// These use a richer sandbox than the click test because they exercise the
+// window-level listeners the minimal sandbox deliberately skips.
+// ---------------------------------------------------------------------------
+
+function runtimeSandbox() {
+  const vm = require('vm');
+  const messages = [];
+  const docListeners = {};
+  const winListeners = {};
+
+  function makeEl(id) {
+    const el = {
+      _id: id,
+      isConnected: true,
+      style: {},
+      getAttribute: (n) => (n === 'data-framelab-id' ? id : null),
+      getBoundingClientRect: () => ({
+        top: 1, left: 2, width: 3, height: 4, bottom: 5, right: 6,
+      }),
+      scrollIntoView: () => {},
+    };
+    el.closest = (sel) => (sel === '[data-framelab-id]' ? el : null);
+    return el;
+  }
+
+  const tagged = makeEl('div|/a/B.tsx|3|10');
+  const untagged = { closest: () => null };
+
+  const sandbox = {
+    window: {
+      __framelab_click_installed: undefined,
+      requestAnimationFrame: (fn) => fn(),
+      addEventListener: (type, fn) => { winListeners[type] = fn; },
+      parent: { postMessage: (msg) => messages.push(msg) },
+    },
+    document: {
+      addEventListener: (type, fn) => { docListeners[type] = fn; },
+      querySelector: (sel) => (sel.includes('div|/a/B.tsx|3|10') ? tagged : null),
+      elementFromPoint: () => tagged,
+    },
+    getComputedStyle: () => ({}),
+  };
+  sandbox.window.parent.window = sandbox.window.parent;
+  vm.createContext(sandbox);
+  vm.runInContext(RUNTIME_SOURCE, sandbox, { filename: 'framelab-runtime.js' });
+  return { messages, docListeners, winListeners, tagged, untagged, sandbox };
+}
+
+cases.push({
+  name: 'runtime: hovering a tagged element reports it to the canvas',
+  filename: path.join(__dirname, 'fixtures', 'pages', '_app.tsx'),
+  options: { injectClickRuntime: true },
+  input: `export default function App() { return <div/>; }\n`,
+  expect: () => {
+    const { messages, docListeners, tagged } = runtimeSandbox();
+    assert.ok(docListeners.mousemove, 'mousemove listener not registered');
+    docListeners.mousemove({ target: tagged, clientX: 5, clientY: 5, preventDefault(){} });
+    const hover = messages.find((m) => m.type === 'FRAMELAB_HOVER');
+    assert.ok(hover, `no hover message: ${JSON.stringify(messages)}`);
+    assert.strictEqual(hover.framelabId, 'div|/a/B.tsx|3|10');
+    assert.strictEqual(hover.rect.width, 3);
+  },
+});
+
+cases.push({
+  name: 'runtime: moving off a tagged element clears the hover',
+  filename: path.join(__dirname, 'fixtures', 'pages', '_app.tsx'),
+  options: { injectClickRuntime: true },
+  input: `export default function App() { return <div/>; }\n`,
+  expect: () => {
+    const { messages, docListeners, tagged, untagged } = runtimeSandbox();
+    docListeners.mousemove({ target: tagged, clientX: 5, clientY: 5, preventDefault(){} });
+    docListeners.mousemove({ target: untagged, clientX: 900, clientY: 900, preventDefault(){} });
+    assert.ok(
+      messages.some((m) => m.type === 'FRAMELAB_HOVER_OUT'),
+      `no hover-out: ${JSON.stringify(messages.map((m) => m.type))}`
+    );
+  },
+});
+
+cases.push({
+  name: 'runtime: clicking empty space deselects',
+  filename: path.join(__dirname, 'fixtures', 'pages', '_app.tsx'),
+  options: { injectClickRuntime: true },
+  input: `export default function App() { return <div/>; }\n`,
+  expect: () => {
+    const { messages, docListeners, untagged } = runtimeSandbox();
+    docListeners.click({ target: untagged, preventDefault(){}, stopPropagation(){} });
+    assert.ok(
+      messages.some((m) => m.type === 'FRAMELAB_DESELECT'),
+      `no deselect: ${JSON.stringify(messages.map((m) => m.type))}`
+    );
+  },
+});
+
+cases.push({
+  name: 'runtime: Escape deselects',
+  filename: path.join(__dirname, 'fixtures', 'pages', '_app.tsx'),
+  options: { injectClickRuntime: true },
+  input: `export default function App() { return <div/>; }\n`,
+  expect: () => {
+    const { messages, docListeners } = runtimeSandbox();
+    docListeners.keydown({ key: 'Escape' });
+    assert.ok(messages.some((m) => m.type === 'FRAMELAB_DESELECT'), 'Escape did not deselect');
+  },
+});
+
+cases.push({
+  name: 'runtime: Delete is forwarded only when something is selected',
+  filename: path.join(__dirname, 'fixtures', 'pages', '_app.tsx'),
+  options: { injectClickRuntime: true },
+  input: `export default function App() { return <div/>; }\n`,
+  expect: () => {
+    const { messages, docListeners, tagged } = runtimeSandbox();
+    // Nothing selected yet: the key must not travel.
+    docListeners.keydown({ key: 'Delete', target: null, preventDefault() {} });
+    assert.ok(!messages.some((m) => m.type === 'FRAMELAB_KEY'),
+      'Delete forwarded with no selection');
+
+    docListeners.click({ target: tagged, preventDefault() {}, stopPropagation() {} });
+    docListeners.keydown({ key: 'Delete', target: null, preventDefault() {} });
+    const key = messages.find((m) => m.type === 'FRAMELAB_KEY');
+    assert.ok(key, `Delete not forwarded: ${JSON.stringify(messages.map((m) => m.type))}`);
+    assert.strictEqual(key.key, 'Delete');
+  },
+});
+
+cases.push({
+  name: 'runtime: Backspace inside a form field is left alone',
+  filename: path.join(__dirname, 'fixtures', 'pages', '_app.tsx'),
+  options: { injectClickRuntime: true },
+  input: `export default function App() { return <div/>; }\n`,
+  expect: () => {
+    const { messages, docListeners, tagged } = runtimeSandbox();
+    docListeners.click({ target: tagged, preventDefault() {}, stopPropagation() {} });
+    const before = messages.length;
+    docListeners.keydown({ key: 'Backspace', target: { tagName: 'INPUT' }, preventDefault() {} });
+    assert.strictEqual(messages.length, before, 'Backspace stolen from a text field');
+  },
+});
+
+cases.push({
+  name: 'runtime: the canvas can select an element by id',
+  filename: path.join(__dirname, 'fixtures', 'pages', '_app.tsx'),
+  options: { injectClickRuntime: true },
+  input: `export default function App() { return <div/>; }\n`,
+  expect: () => {
+    const { messages, winListeners } = runtimeSandbox();
+    assert.ok(winListeners.message, 'message listener not registered');
+    winListeners.message({ data: { type: 'FRAMELAB_SELECT', framelabId: 'div|/a/B.tsx|3|10' } });
+    const click = messages.find((m) => m.type === 'FRAMELAB_CLICK');
+    assert.ok(click, `no click echo: ${JSON.stringify(messages)}`);
+    assert.strictEqual(click.fromCanvas, true);
+    assert.strictEqual(click.framelabId, 'div|/a/B.tsx|3|10');
+  },
+});
+
+cases.push({
+  name: 'runtime: selecting a missing element reports not-found',
+  filename: path.join(__dirname, 'fixtures', 'pages', '_app.tsx'),
+  options: { injectClickRuntime: true },
+  input: `export default function App() { return <div/>; }\n`,
+  expect: () => {
+    const { messages, winListeners } = runtimeSandbox();
+    winListeners.message({ data: { type: 'FRAMELAB_SELECT', framelabId: 'nope|/x.tsx|1|1' } });
+    assert.ok(messages.some((m) => m.type === 'FRAMELAB_NOT_FOUND'), 'no not-found message');
+  },
+});
+
 let passed = 0;
 let failed = 0;
 for (const c of cases) {

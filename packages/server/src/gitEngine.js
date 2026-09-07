@@ -111,11 +111,26 @@ async function getDiff(rootDir, opts = {}) {
   return { initialized: true, diff };
 }
 
+// Same symlink caveat as the sync server: a path that arrives in its resolved
+// form (/private/var/...) must still be recognised as living inside a root
+// given in its unresolved form (/var/...), or git gets a path outside the repo.
+function realpathOrSelf(p) {
+  try { return fs.realpathSync(p); } catch { return path.resolve(p); }
+}
+
 function relInside(rootDir, filePath) {
   const abs = path.resolve(filePath);
-  const rel = path.relative(rootDir, abs);
-  if (rel.startsWith('..') || path.isAbsolute(rel)) return null;
-  return rel;
+  const candidates = [
+    [path.resolve(rootDir), abs],
+    [realpathOrSelf(rootDir), realpathOrSelf(path.dirname(abs)) === path.dirname(abs)
+      ? abs
+      : path.join(realpathOrSelf(path.dirname(abs)), path.basename(abs))],
+  ];
+  for (const [root, target] of candidates) {
+    const rel = path.relative(root, target);
+    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) return rel;
+  }
+  return null;
 }
 
 async function revertFile(rootDir, filePath) {

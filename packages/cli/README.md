@@ -47,7 +47,7 @@ Framelab attaches to a dev server you're already running.
 cd your-next-app
 
 npx framelab init          # detect the project, write babel.config.js + .env wiring
-npm install --save-dev @framelab/babel-plugin @babel/runtime
+npm install --save-dev @framelab/babel-plugin '@babel/runtime@^7'
 
 npm run dev                # terminal 1 — your app
 npx framelab               # terminal 2 — the canvas

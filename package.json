@@ -9,6 +9,6 @@
   ],
   "scripts": {
     "test": "npm test --workspace @framelab/babel-plugin --workspace @framelab/server",
-    "publish-all": "npm publish --workspace @framelab/babel-plugin --workspace @framelab/canvas --workspace @framelab/server --workspace framelab"
+    "publish-all": "npm test && npm publish --workspace @framelab/babel-plugin --workspace @framelab/canvas --workspace @framelab/server --workspace framelab"
   }
 }

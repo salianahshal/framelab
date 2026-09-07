@@ -312,8 +312,10 @@ function testTemplateLiteralClassName() {
   const button = els.find((e) => e.tagName === 'button');
 
   assert(a.classNameKind === 'template', `expected template kind, got ${a.classNameKind}`);
+  // Interpolations appear as pinned placeholders so an edit can never move or
+  // drop them; the static classes surround them exactly as in the source.
   assert(
-    a.className === 'flex items-center px-3 text-sm',
+    a.className === 'flex items-center px-3 text-sm __FRAMELAB_EXPR_0__',
     `static classes wrong: "${a.className}"`
   );
   assert(
@@ -322,15 +324,20 @@ function testTemplateLiteralClassName() {
   );
   console.log('  extract: <a> is kind=template, static + ${focusRing} split  OK');
 
-  // cn(...) must still be treated as an opaque expression (not editable).
+  // cn(...) is now an editable surface: the first string literal argument
+  // holds the base classes, and the remaining arguments are left alone.
   assert(
-    button.classNameKind === 'expression',
-    `cn() should be expression, got ${button.classNameKind}`
+    button.classNameKind === 'call',
+    `cn() should be kind=call, got ${button.classNameKind}`
   );
-  console.log('  extract: cn() button stays kind=expression  OK');
+  assert(button.className === 'p-2', `cn() base classes wrong: "${button.className}"`);
+  console.log('  extract: cn() button is kind=call with editable base classes  OK');
 
-  // Edit the static classes; the ${focusRing} interpolation must survive verbatim.
-  const res = astEngine.updateClassName(file, a.framelabId, 'flex items-center px-4 text-base');
+  // Edit the static classes; the ${focusRing} interpolation must survive verbatim
+  // and stay in its original trailing position.
+  const res = astEngine.updateClassName(
+    file, a.framelabId, 'flex items-center px-4 text-base __FRAMELAB_EXPR_0__'
+  );
   assert(res.ok, `update failed: ${JSON.stringify(res)}`);
   const after = fs.readFileSync(file, 'utf8');
   const expectedLine = '<a className={`flex items-center px-4 text-base ${focusRing}`}>';
@@ -341,7 +348,8 @@ function testTemplateLiteralClassName() {
   // Re-extract and confirm it is still a clean template with new static value.
   const a2 = astEngine.extractElements(file).elements.find((e) => e.tagName === 'a');
   assert(
-    a2.classNameKind === 'template' && a2.className === 'flex items-center px-4 text-base',
+    a2.classNameKind === 'template' &&
+      a2.className === 'flex items-center px-4 text-base __FRAMELAB_EXPR_0__',
     `re-extract wrong: ${a2.classNameKind} "${a2.className}"`
   );
   console.log('  round-trip: re-extracts as template with updated classes  OK');
