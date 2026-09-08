@@ -1,10 +1,14 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/salianahshal/framelab/main/packages/canvas/logo-dark-bg.svg" alt="Framelab" width="72" height="72">
+<img src="https://raw.githubusercontent.com/salianahshal/framelab/main/packages/canvas/logo.svg" alt="Framelab" width="76" height="76">
 
 # framelab
 
 **Visual editor for Next.js + Tailwind. Runs on your machine, edits your files.**
+
+Click any element in your running app. Restyle it, rewrite its text, delete it,
+or hand it to your coding agent — Framelab writes the change back into your
+source file, touching only the tokens you actually changed.
 
 [![npm](https://img.shields.io/npm/v/framelab?color=e0490d&label=npm)](https://www.npmjs.com/package/framelab)
 [![node](https://img.shields.io/node/v/framelab?color=e0490d)](https://nodejs.org)
@@ -116,19 +120,65 @@ the model guess at class strings.
 
 | Tool | Purpose |
 | --- | --- |
+| `get_selection` | What the user is pointing at in the canvas, right now |
 | `list_files` | List all `.tsx`/`.jsx` files in the project |
 | `find_elements` | Search elements by tag, className substring, or text |
 | `get_element` | Full element details + parsed Tailwind props |
 | `list_design_tokens` | Your `tailwind.config` tokens (colors, spacing, etc.) |
-| `update_styles` | Edit Tailwind classes via structured props |
+| `update_styles` | Edit Tailwind classes, base or per-variant |
 | `update_text` | Replace an element's text content |
 | `move_sibling` | Reorder siblings (same parent only) |
+| `delete_element` | Remove an element, returning how to restore it |
+| `restore_element` | Put a deleted element back, byte for byte |
 | `commit` | Atomic git commit with the given message |
 | `get_diff` | Current pending git diff |
+| `snapshot` | PNG of an element or a route, so the model can see its work |
+
+Two of these change how it feels to work with an agent:
+
+- **`get_selection`** answers "what is the user pointing at?". Click an element
+  in the canvas, then say "make this bigger" — no file paths, no grepping. The
+  agent gets the exact source line, the parsed Tailwind values, the ancestor
+  chain, and which breakpoint you have open in the inspector.
+- **`update_styles` validates against your `tailwind.config`.** A model that
+  writes `bg-embr` gets *"not in this project's colour palette. Did you mean
+  ember?"* rather than a class Tailwind silently drops. Edits are structured
+  (`{prop, value, variants}`), so the model chooses values while Framelab
+  renders the class string — it cannot reorder your classes or emit one that
+  fails to parse.
 
 Run the canvas at the same time and you'll watch the model's edits land live.
 Full setup per client is in
 [MCP.md](https://github.com/salianahshal/framelab/blob/main/packages/cli/MCP.md).
+
+## In the canvas
+
+| | |
+| --- | --- |
+| **Select** | Click any element. Hover outlines, a layer tree, and a breadcrumb show where you are. `↑`/`↓` walk to the parent or first child, `←`/`→` to siblings, `Esc` deselects. |
+| **Restyle** | Spacing is a box model, colours and tokens open compact popovers filled from your own `tailwind.config`. No full-height dropdowns. |
+| **Responsive & state** | Pick `sm`…`2xl` or `hover`/`focus`/`dark` and edit that variant directly. The canvas widens to the breakpoint so you can see what you're changing. |
+| **Rewrite text** | Edit an element's text when its children are plain text. |
+| **Delete** | `Del` removes the element and its children, with no blank line left behind. |
+| **Undo** | `⌘Z` covers styles, text, reorders and deletes, restoring bytes exactly. |
+| **Review** | A diff panel with per-hunk revert, commit, and an optional auto-commit per edit. |
+
+## What can be edited
+
+If you can see it on the canvas you can generally edit it. The exception is a
+`className` built from an expression Framelab won't rewrite without guessing:
+
+| className shape | Editable |
+| --- | --- |
+| `className="p-4 flex"` | yes |
+| ``className={`p-4 ${ring}`}`` | yes — the `${…}` keeps its exact position |
+| `className={cn('p-4', active && 'bg-red')}` | yes — the first string argument |
+| `className={clsx(…)}` / `twMerge(…)` / `cva(…)` | yes |
+| `className={a ? 'p-2' : 'p-4'}` | no — refused, not guessed at |
+
+Elements that can't be edited are marked with a lock in the layer tree, so it's
+never a silent failure. Every write is re-parsed before it lands: a change that
+would break the file is refused and the file left untouched.
 
 ## How it works
 
@@ -147,6 +197,8 @@ browser UI, served locally.
   Components are skipped, so those elements aren't clickable.
 - Framelab configures Babel, which means Next falls back from SWC to Babel in
   development. Your production build is unaffected.
+- Editing an element inside a reused component edits its **definition**, so the
+  change applies to every instance. The layer tree shows you where you are.
 
 ## Links
 
