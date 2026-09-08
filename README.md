@@ -9,9 +9,9 @@
 
 **Visual editor for Next.js + Tailwind. Runs on your machine, edits your files.**
 
-Click any element in your running app, adjust its Tailwind classes visually, and
-Framelab writes the change straight back into your source — byte-surgical AST
-edits, no formatting churn, no cloud round-trip.
+Click any element in your running app. Restyle it, rewrite its text, delete it,
+or hand it to your coding agent — Framelab writes the change back into your
+source file, touching only the tokens you actually changed.
 
 [![npm](https://img.shields.io/npm/v/framelab?color=e0490d&label=npm)](https://www.npmjs.com/package/framelab)
 [![node](https://img.shields.io/node/v/framelab?color=e0490d)](https://nodejs.org)
@@ -38,6 +38,9 @@ Framelab does neither.
   and `14px`.
 - **Responsive and state styles are values, not strings.** Pick `md` or `hover`
   in the inspector and edit that variant directly; the base styles stay put.
+- **Built to work with an agent.** Your AI editor can ask Framelab what you're
+  pointing at, and its edits are checked against your own design system before
+  they're written.
 - **Your git workflow, unchanged.** Changes land as ordinary working-tree edits.
   Review them, revert a hunk, or commit them like anything else.
 
@@ -59,35 +62,58 @@ npx framelab               # terminal 2 — the canvas
 `dev` script, then 3000-3003, 4000, 5173, 5174, 8080), opens the canvas on
 **http://localhost:3133**, and starts watching your source.
 
-## Commands
+## What can be edited
 
-| Command | Description |
+If you can see it on the canvas, you can generally edit it. The exception is a
+`className` built from an expression Framelab cannot rewrite without guessing at
+behaviour it can't see:
+
+| className shape | Editable |
 | --- | --- |
-| `framelab` | Start the canvas — same as `framelab start` |
-| `framelab init` | Detect the project and write `babel.config.js` + `.env.development` |
-| `framelab start` | Start the canvas and sync server explicitly |
-| `framelab mcp` | Run the MCP server over stdio for AI clients |
-| `framelab help` | Show usage |
-| `framelab --version` | Print the version |
+| `className="p-4 flex"` | yes |
+| ``className={`p-4 ${ring}`}`` | yes — the `${…}` keeps its exact position |
+| `className={cn('p-4', active && 'bg-red')}` | yes — the first string argument |
+| `className={clsx(…)}` / `twMerge(…)` / `cva(…)` | yes |
+| `className={a ? 'p-2' : 'p-4'}` | no — refused, not guessed at |
+| `className={styles.root}` | no |
 
-### Options for `start`
+Elements that can't be edited are marked with a lock in the layer tree and say
+so in the inspector, so it's never a silent failure. Text is editable whenever
+an element's children are plain text.
 
-| Flag | Default | Description |
-| --- | --- | --- |
-| `--app-url <url>` | auto-detect | Your dev server URL |
-| `--port <n>` | `3133` | Canvas port |
-| `--api-port <n>` | `3131` | Sync server port |
-| `--root <dir>` | `cwd` | Directory to watch |
-| `--no-open` | — | Don't open the browser |
+Every write is re-parsed before it lands: if a change would break the file, it
+is refused and the file is left untouched.
 
-Any of these keys can be set per project in a `.framelabrc.json` file, so you
-don't have to retype flags.
+## Deleting
+
+Select an element and press `Del`, or use the trash button in the inspector
+header. The element and everything inside it are removed, along with the line
+break and indentation that introduced it, so no blank line is left behind.
+Selection moves to the parent.
+
+Deleting removes real source code, so it is always recoverable: `⌘Z` puts the
+element back byte for byte at the same position, and the toast that appears
+offers the same undo. Deleting is refused on the outermost element of a
+component, which would leave the component returning nothing.
+
+## Keyboard
+
+| Key | Action |
+| --- | --- |
+| `Esc` | Deselect |
+| `↑` / `↓` | Select parent / first child |
+| `←` / `→` | Select previous / next sibling |
+| `Del` / `⌫` | Delete the selected element |
+| `⌘Z` / `⌘⇧Z` | Undo / redo an edit, a reorder, or a delete |
+| `⌘B` / `⌘J` | Toggle the left and right panels |
+
+Shortcuts work whether focus is in the canvas or in the preview.
 
 ## Use it from your AI editor
 
-Framelab also ships an MCP server, which gives Claude Code, Cursor, Continue, or
-Windsurf the same token-aware, byte-surgical editing the canvas uses — instead
-of letting the model guess at class strings.
+Framelab ships an MCP server, so Claude Code, Cursor, Continue or Windsurf get
+the same token-aware, surgical editing the canvas uses — instead of guessing at
+class strings.
 
 ```json
 {
@@ -100,25 +126,44 @@ of letting the model guess at class strings.
 }
 ```
 
-Thirteen tools are exposed — `get_selection`, `list_files`, `find_elements`,
-`get_element`, `list_design_tokens`, `update_styles`, `update_text`,
-`move_sibling`, `delete_element`, `restore_element`, `commit`, `get_diff`, and
-`snapshot`. Run the canvas at the same time and you'll watch the model's edits
-land live.
+Framelab knows two things a coding agent cannot work out on its own: which
+element you are looking at, and what your design system actually contains.
 
-Two of those change how it feels to work with an agent:
+```
+  you click a button in the canvas
+             │
+             ▼
+     selection published to the sync server
+             │
+             │   get_selection
+             ▼
+  Claude Code / Cursor  ──  update_styles({ props, variants })
+                                        │
+                              validated against tailwind.config
+                                        ▼
+                                surgical write to your source
+```
 
-- **`get_selection`** answers "what is the user pointing at?". Click an element
-  in the canvas, then say "make this bigger" — no file paths, no grepping, no
-  guessing which of the four buttons you meant. The agent gets the exact source
-  line, the parsed Tailwind values, the ancestor chain, and which breakpoint you
-  have open in the inspector.
+- **`get_selection`** answers "what is the user pointing at?". Click an element,
+  then say "make this bigger" — no file paths, no grepping, no guessing which of
+  the four buttons you meant. The agent gets the exact source line, the parsed
+  Tailwind values, the ancestor chain, and which breakpoint you have open in the
+  inspector.
 - **`update_styles` validates against your `tailwind.config`.** A model that
   writes `bg-embr` gets *"not in this project's colour palette. Did you mean
-  ember?"* instead of a class Tailwind silently drops. Edits are structured
-  (`{prop, value, variants}`), so a model chooses values while Framelab renders
+  ember?"* rather than a class Tailwind silently drops. Edits are structured
+  (`{prop, value, variants}`), so the model chooses values while Framelab renders
   the class string — it cannot reorder your classes or emit one that fails to
   parse.
+
+Thirteen tools are exposed in total: `get_selection`, `list_files`,
+`find_elements`, `get_element`, `list_design_tokens`, `update_styles`,
+`update_text`, `move_sibling`, `delete_element`, `restore_element`, `commit`,
+`get_diff`, and `snapshot`. Run the canvas at the same time and you'll watch the
+model's edits land live.
+
+If you'd rather paste into a chat window than wire up MCP, the inspector header
+has a copy button that puts the same context on your clipboard.
 
 See **[MCP.md](packages/cli/MCP.md)** for client-by-client setup and the full
 tool reference.
@@ -146,43 +191,29 @@ stable id, which is what lets a click in the browser resolve back to a file and
 line. The server parses that file, edits the `className` node in the AST, and
 writes it back — touching nothing else.
 
-## Working with an AI agent
+## Commands
 
-Framelab knows two things no coding agent can work out on its own: which
-element you are looking at, and what your design system actually contains. Both
-are exposed over MCP.
-
-```
-  you click a button in the canvas
-             │
-             ▼
-     selection published to the sync server
-             │
-             │   get_selection
-             ▼
-  Claude Code / Cursor  ──  update_styles({ props, variants })
-                                        │
-                              validated against tailwind.config
-                                        ▼
-                              byte-surgical write to your source
-```
-
-If you'd rather paste into a chat window than wire up MCP, the inspector header
-has a copy button that puts the same context on your clipboard: file and line,
-the class string, the nesting, and the variant you're editing.
-
-## Keyboard
-
-| Key | Action |
+| Command | Description |
 | --- | --- |
-| `Esc` | Deselect |
-| `↑` / `↓` | Select parent / first child |
-| `←` / `→` | Select previous / next sibling |
-| `Del` / `⌫` | Delete the selected element |
-| `⌘Z` / `⌘⇧Z` | Undo / redo an edit, a reorder, or a delete |
-| `⌘B` / `⌘J` | Toggle the left and right panels |
+| `framelab` | Start the canvas — same as `framelab start` |
+| `framelab init` | Detect the project and write `babel.config.js` + `.env.development` |
+| `framelab start` | Start the canvas and sync server explicitly |
+| `framelab mcp` | Run the MCP server over stdio for AI clients |
+| `framelab help` | Show usage |
+| `framelab --version` | Print the version |
 
-Shortcuts work whether focus is in the canvas or in the preview.
+### Options for `start`
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--app-url <url>` | auto-detect | Your dev server URL |
+| `--port <n>` | `3133` | Canvas port |
+| `--api-port <n>` | `3131` | Sync server port |
+| `--root <dir>` | `cwd` | Directory to watch |
+| `--no-open` | — | Don't open the browser |
+
+Any of these keys can be set per project in a `.framelabrc.json` file, so you
+don't have to retype flags.
 
 ## Packages
 
@@ -192,40 +223,6 @@ Shortcuts work whether focus is in the canvas or in the preview.
 | [`@framelab/server`](packages/server) | File watcher, AST writer, Tailwind theme/class parsing, git hunk revert, REST + WebSocket bridge |
 | [`@framelab/babel-plugin`](packages/babel-plugin) | Tags JSX elements with `data-framelab-id`; optionally injects the click runtime |
 | [`@framelab/canvas`](packages/canvas) | The browser canvas UI, served by the sync server |
-
-## What can be edited
-
-If you can see it on the canvas, you can generally edit it. The exception is a
-`className` built from an expression Framelab cannot rewrite without guessing at
-behaviour it can't see:
-
-| className shape | Editable |
-| --- | --- |
-| `className="p-4 flex"` | yes |
-| ``className={`p-4 ${ring}`}`` | yes — the `${…}` keeps its exact position |
-| `className={cn('p-4', active && 'bg-red')}` | yes — the first string argument |
-| `className={clsx(…)}` / `twMerge(…)` / `cva(…)` | yes |
-| `className={a ? 'p-2' : 'p-4'}` | no — refused, not guessed at |
-| `className={styles.root}` | no |
-
-Elements that can't be edited are marked with a lock in the layer tree and say
-so in the inspector, so it's never a silent failure. Text is editable whenever
-an element's children are plain text.
-
-## Deleting
-
-Select an element and press `Del`, or use the trash button in the inspector
-header. The element and everything inside it are removed, along with the line
-break and indentation that introduced it, so no blank line is left behind.
-Selection moves to the parent.
-
-Deleting removes real source code, so it is always recoverable: `⌘Z` puts the
-element back byte for byte at the same position, and the toast that appears
-offers the same undo. Deleting is refused on the outermost element of a
-component, which would leave the component returning nothing.
-
-Every write is re-parsed before it lands: if a change would break the file, it
-is refused and the file is left untouched.
 
 ## Requirements & current limits
 
