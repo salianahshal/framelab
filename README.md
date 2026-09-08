@@ -1,9 +1,6 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="packages/canvas/logo-dark-bg.svg">
-  <img src="packages/canvas/logo-light-bg.svg" alt="Framelab" width="72" height="72">
-</picture>
+<img src="packages/canvas/logo.svg" alt="Framelab" width="76" height="76">
 
 # Framelab
 
