@@ -238,7 +238,7 @@ don't have to retype flags.
 
 ## Development
 
-The packages are linked with `file:` dependencies and install independently:
+The four packages are an npm workspace. Each one also installs and tests on its own:
 
 ```sh
 cd packages/babel-plugin && npm install && npm test
