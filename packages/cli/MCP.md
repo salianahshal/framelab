@@ -95,8 +95,11 @@ The file changes byte-surgically. A clean conventional-commits-style commit land
 | `update_styles` | Edit Tailwind classes via structured props, base or per-variant |
 | `update_text` | Replace an element's text content |
 | `move_sibling` | Reorder siblings (same parent only) |
+| `duplicate_element` | Copy an element in as its next sibling |
 | `delete_element` | Remove an element and its children, returning how to restore it |
 | `restore_element` | Put a deleted element back, byte for byte |
+| `find_drift` | Hardcoded values that a project design token already covers |
+| `fix_drift` | Replace those hardcoded values with the tokens |
 | `commit` | Atomic git commit with the given message |
 | `get_diff` | Current pending git diff |
 

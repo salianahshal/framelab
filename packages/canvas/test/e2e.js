@@ -265,7 +265,7 @@ async function main() {
   check('the hover outline is labelled with the tag', hoverShown.label === 'ul', hoverShown.label);
 
   // ---- 3d. Agent context ----
-  const agentBtn = await page.$('.inspector-head .head-action:not(.danger)');
+  const agentBtn = await page.$('.inspector-head [data-action="agent-context"]');
   check('the inspector offers an agent-context action', !!agentBtn);
   await page.evaluate(() => {
     // Headless Chrome denies clipboard writes; capture what would be copied.
@@ -396,7 +396,7 @@ async function main() {
     const selBefore = await page.$eval('.inspector-head .tag', (n) => n.textContent.trim());
     check('the button to delete is selected', selBefore === '<button>', selBefore);
 
-    const delBtn = await page.$('.inspector-head .head-action.danger');
+    const delBtn = await page.$('.inspector-head [data-action="delete"]');
     check('the inspector offers a delete action', !!delBtn);
     await delBtn.click();
     await new Promise((r) => setTimeout(r, 1200));
@@ -432,6 +432,36 @@ async function main() {
     await new Promise((r) => setTimeout(r, 1400));
     check('undo after a keyboard delete restores it too',
       fs.readFileSync(pageFile, 'utf8') === beforeDelete, '');
+  }
+
+  // ---- 7d. Duplicate, and undoing it ----
+  const dupTarget = snap.elements.find((e) => e.tagName === 'li');
+  if (dupTarget) {
+    const beforeDup = fs.readFileSync(pageFile, 'utf8');
+    await frame.click(`[data-framelab-id="${dupTarget.framelabId.replace(/"/g, '\\"')}"]`);
+    await new Promise((r) => setTimeout(r, 700));
+
+    const dupBtn = await page.$('.inspector-head [data-action="duplicate"]');
+    check('the inspector offers a duplicate action', !!dupBtn);
+    await dupBtn.click();
+    await new Promise((r) => setTimeout(r, 1300));
+
+    const afterDup = fs.readFileSync(pageFile, 'utf8');
+    check('duplicating adds a second copy of the element',
+      (afterDup.match(/<li/g) || []).length === 3,
+      `${(afterDup.match(/<li/g) || []).length} list items`);
+    check('the copy keeps the original indentation', (() => {
+      const lines = afterDup.split('\n').filter((l) => l.includes('>One<'));
+      return lines.length === 2 && lines[0] === lines[1];
+    })(), '');
+    const selAfter = await page.$eval('.inspector-head .tag', (n) => n.textContent.trim());
+    check('selection moves to the new copy', selAfter === '<li>', selAfter);
+
+    await page.evaluate(() => document.getElementById('undo-btn').click());
+    await new Promise((r) => setTimeout(r, 1500));
+    check('undo removes the copy byte for byte',
+      fs.readFileSync(pageFile, 'utf8') === beforeDup,
+      fs.readFileSync(pageFile, 'utf8') === beforeDup ? '' : 'file differs');
   }
 
   // ---- 8. Keyboard: parent selection and deselect ----

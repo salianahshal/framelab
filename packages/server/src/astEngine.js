@@ -841,6 +841,50 @@ function deleteElement(filePath, framelabId, opts) {
 }
 
 /**
+ * Duplicate an element in place, as the next sibling of the original.
+ *
+ * Almost free: the element's own source text is the thing to insert, and
+ * `insertElement` already knows how to place a block at a given index with the
+ * right indentation.
+ */
+function duplicateElement(filePath, framelabId, opts) {
+  const code = readSource(filePath);
+  const ast = parseCode(code);
+  const stableKeys = buildStableKeys(ast);
+  const candidates = collectCandidates(ast, filePath, stableKeys);
+
+  const match = findByIdOrKey(candidates, framelabId, opts && opts.stableKey);
+  if (!match) return { ok: false, reason: 'element-not-found' };
+
+  const parent = match.parent;
+  if (!isElementNode(parent)) {
+    // The outermost element of a return expression has no sibling slot to
+    // duplicate into; a component can only return one node.
+    return { ok: false, reason: 'cannot-duplicate-root' };
+  }
+
+  const siblings = elementChildrenOf(parent);
+  const index = siblings.indexOf(match.node);
+  if (index < 0) return { ok: false, reason: 'element-not-in-parent' };
+
+  const source = code.slice(match.node.start, match.node.end);
+  const parentKey = stableKeys.get(parent) || null;
+
+  const inserted = insertElement(filePath, parentKey, index + 1, source);
+  if (!inserted.ok) return inserted;
+
+  return {
+    ok: true,
+    parentKey,
+    index: index + 1,
+    tagName: match.tagName,
+    source,
+    bytesBefore: code.length,
+    bytesAfter: inserted.bytesAfter,
+  };
+}
+
+/**
  * Put an element back as child `index` of the element with `parentKey`.
  * Used to undo a delete; the source text is re-indented to match its
  * neighbours so the restored file matches the original byte for byte.
@@ -904,6 +948,7 @@ module.exports = {
   moveElement,
   deleteElement,
   insertElement,
+  duplicateElement,
   parseFramelabId,
   buildFramelabId,
   classSurface,

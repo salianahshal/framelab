@@ -128,6 +128,9 @@ the model guess at class strings.
 | `update_styles` | Edit Tailwind classes, base or per-variant |
 | `update_text` | Replace an element's text content |
 | `move_sibling` | Reorder siblings (same parent only) |
+| `duplicate_element` | Copy an element in as its next sibling |
+| `find_drift` | Hardcoded values a project token already covers |
+| `fix_drift` | Replace those values with the tokens |
 | `delete_element` | Remove an element, returning how to restore it |
 | `restore_element` | Put a deleted element back, byte for byte |
 | `commit` | Atomic git commit with the given message |
@@ -159,9 +162,18 @@ Full setup per client is in
 | **Restyle** | Spacing is a box model, colours and tokens open compact popovers filled from your own `tailwind.config`. No full-height dropdowns. |
 | **Responsive & state** | Pick `sm`…`2xl` or `hover`/`focus`/`dark` and edit that variant directly. The canvas widens to the breakpoint so you can see what you're changing. |
 | **Rewrite text** | Edit an element's text when its children are plain text. |
+| **Duplicate** | `⌘D` copies the element in as its next sibling and selects the copy. |
 | **Delete** | `Del` removes the element and its children, with no blank line left behind. |
-| **Undo** | `⌘Z` covers styles, text, reorders and deletes, restoring bytes exactly. |
+| **Undo** | `⌘Z` covers styles, text, reorders, duplicates and deletes, restoring bytes exactly. |
 | **Review** | A diff panel with per-hunk revert, commit, and an optional auto-commit per edit. |
+
+## Design-system drift
+
+`bg-[#6e56cf]` and `bg-brand` render identically and diverge the moment the
+token changes. `find_drift` compares every hardcoded value against your
+`tailwind.config` and reports the ones a token already covers — units
+normalised, so `p-[16px]` matches a `4` that resolves to `1rem`. `fix_drift`
+applies them. Genuine one-offs are left alone.
 
 ## What can be edited
 

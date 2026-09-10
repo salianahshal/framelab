@@ -252,6 +252,58 @@ async function main() {
         framelabId: id, props: { background: '[#ff0000]' }, preview: true,
       })).isError, '');
 
+    // ---- Duplicating what the user pointed at ----
+    const beforeDup = fs.readFileSync(pageFile, 'utf8');
+    const dup = await mcp.call('duplicate_element', { framelabId: id });
+    check('the agent can duplicate the selected element',
+      !dup.isError && (fs.readFileSync(pageFile, 'utf8').match(/<button/g) || []).length === 2,
+      dup.isError ? dup.text : `copy id ${dup.data.copyFramelabId ? 'returned' : 'MISSING'}`);
+    check('it hands back an id for the copy so the next edit is unambiguous',
+      !!dup.data.copyFramelabId, '');
+    const edited = await mcp.call('update_text', {
+      framelabId: dup.data.copyFramelabId, content: 'Buy later',
+    });
+    check('the copy is immediately editable',
+      !edited.isError && fs.readFileSync(pageFile, 'utf8').includes('Buy later'), '');
+    // Put the file back.
+    const copyNow = JSON.parse((await mcp.call('find_elements', { textContains: 'Buy later' })).text)
+      .elements[0];
+    await mcp.call('delete_element', { framelabId: copyNow.framelabId });
+    check('removing the copy restores the file',
+      fs.readFileSync(pageFile, 'utf8') === beforeDup, '');
+
+    // ---- Design-system drift ----
+    // Hand-write the hardcoded values this project already has tokens for.
+    const beforeDrift = fs.readFileSync(pageFile, 'utf8');
+    fs.writeFileSync(pageFile, beforeDrift.replace(
+      /(<button className=")[^"]*(")/,
+      '$1px-4 py-2 rounded-[14px] bg-[#6e56cf] text-white$2'
+    ), 'utf8');
+
+    const drift = await mcp.call('find_drift');
+    check('drift finds hardcoded values that a token already covers',
+      !drift.isError && drift.data.total === 2, `total ${drift.data.total}`);
+    const replacements = (drift.data.files[0].elements[0].replacements || [])
+      .map((r) => `${r.from}->${r.to}`).sort().join(' ');
+    check('it names the token to use in each case',
+      replacements === 'bg-[#6e56cf]->bg-brand rounded-[14px]->rounded-card', replacements);
+
+    const fixed = await mcp.call('fix_drift');
+    const afterFix = fs.readFileSync(pageFile, 'utf8');
+    check('fixing drift swaps in the tokens',
+      !fixed.isError && afterFix.includes('rounded-card') && afterFix.includes('bg-brand'),
+      (afterFix.match(/<button className="[^"]*"/) || [''])[0]);
+    check('it leaves everything else on the element alone',
+      afterFix.includes('px-4 py-2') && afterFix.includes('text-white'),
+      (afterFix.match(/<button className="[^"]*"/) || [''])[0]);
+    check('the fixed classes read as tokens, not raw values',
+      !/\[#|\[14px\]/.test(afterFix),
+      (afterFix.match(/<button className="[^"]*"/) || [''])[0]);
+
+    const clean = await mcp.call('find_drift');
+    check('a project already on its tokens reports nothing',
+      clean.data.total === 0, `total ${clean.data.total}`);
+
     // ---- Clearing the selection is visible to the agent ----
     await page.keyboard.press('Escape');
     await sleep(700);

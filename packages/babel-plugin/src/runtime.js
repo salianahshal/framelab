@@ -229,7 +229,7 @@ const RUNTIME_SOURCE = `(function(){
   var FORWARD_KEYS = {
     ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1,
     Delete: 1, Backspace: 1,
-    Escape: 1, z: 1, Z: 1, b: 1, B: 1, j: 1, J: 1
+    Escape: 1, z: 1, Z: 1, b: 1, B: 1, j: 1, J: 1, d: 1, D: 1
   };
   // Keys that only make sense against a selection, and that must never reach
   // the page itself (Backspace would navigate back).

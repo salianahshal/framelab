@@ -75,6 +75,7 @@ const ICONS = {
   refresh: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>',
   link: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>',
   unlink: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h2a5 5 0 0 1 0 10h-2M9 17H7A5 5 0 0 1 7 7h2"/><line x1="2" y1="2" x2="22" y2="22"/></svg>',
+  copy: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
   agent: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M12 7V4"/><circle cx="9" cy="13" r="1.2" fill="currentColor"/><circle cx="15" cy="13" r="1.2" fill="currentColor"/></svg>',
   check: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 9.5 17 19 7.5"/></svg>',
   trash: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>',
@@ -1212,6 +1213,8 @@ function explainUpdateError(err) {
     'element-not-found': 'That element is no longer in the file. Reload the preview.',
     'would-not-parse': 'That change would have broken the file, so it was not written.',
     'path outside project root': 'That file is outside the watched project.',
+    'cannot-duplicate-root':
+      'A component can only return one element, so this one has no sibling slot.',
     'cannot-delete-root':
       'This is the outermost element of the component, so it cannot be deleted here.',
     'element-not-in-parent': 'That element is no longer where Framelab expected it.',
@@ -1276,12 +1279,48 @@ async function deleteSelected() {
   }
 }
 
+// Duplicate the selection as its next sibling, then select the copy so the
+// next thing you type edits the new one.
+async function duplicateSelected() {
+  const el = state.selected;
+  if (!el) return;
+  if (!el.parentId) {
+    toastError('A component can only return one element, so this one has no sibling slot.');
+    return;
+  }
+  const filePath = state.currentFilePath;
+  try {
+    const res = await api('POST', '/duplicate', {
+      filePath, elementId: el.framelabId, stableKey: el.stableKey,
+    });
+    pushUndo({
+      filePath,
+      kind: 'duplicate',
+      parentKey: res.parentKey,
+      index: res.index,
+      tagName: res.tagName || el.tagName,
+    });
+    if (res.snapshot) { state.snapshot = res.snapshot; renderLayerTree(); }
+    const copy = findByStableKey(`${res.parentKey}.${res.index}`);
+    if (copy) selectElement(copy);
+    flashStatus();
+    toast(`Duplicated <${res.tagName || el.tagName}>`, {
+      actionLabel: 'Undo', onAction: undo, duration: 5000,
+    });
+    await maybeAutoCommit('duplicate', {
+      filePath, tagName: res.tagName || el.tagName, line: el.line,
+    });
+  } catch (err) {
+    toastError(explainUpdateError(err));
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Undo / redo
 // ---------------------------------------------------------------------------
 
 function pushUndo(entry) {
-  if (entry.kind === 'move' || entry.kind === 'delete') {
+  if (entry.kind === 'move' || entry.kind === 'delete' || entry.kind === 'duplicate') {
     state.undoStack.push({ ...entry, at: Date.now() });
     if (state.undoStack.length > 100) state.undoStack.shift();
     state.redoStack.length = 0;
@@ -1312,6 +1351,7 @@ function pushUndo(entry) {
 async function applyHistory(entry, direction) {
   if (entry.kind === 'move') return applyMoveHistory(entry, direction);
   if (entry.kind === 'delete') return applyDeleteHistory(entry, direction);
+  if (entry.kind === 'duplicate') return applyDuplicateHistory(entry, direction);
   const payload = {
     filePath: entry.filePath,
     elementId: entry.elementId,
@@ -1325,6 +1365,44 @@ async function applyHistory(entry, direction) {
     flashStatus();
     const el = findByStableKey(entry.stableKey);
     if (el) { state.selected = el; state.selectedKey = el.stableKey; renderInspector(); }
+    return true;
+  } catch (err) {
+    toastError(explainUpdateError(err));
+    return false;
+  }
+}
+
+// Undo of a duplicate removes the copy; redo makes it again from the original.
+async function applyDuplicateHistory(entry, direction) {
+  try {
+    if (state.currentFilePath !== entry.filePath) await loadFile(entry.filePath);
+    if (direction === 'undo') {
+      const copy = findByStableKey(`${entry.parentKey}.${entry.index}`);
+      if (!copy) {
+        toastError('That copy has moved since it was made, so it cannot be undone.');
+        return false;
+      }
+      const res = await api('POST', '/delete', {
+        filePath: entry.filePath, elementId: copy.framelabId, stableKey: copy.stableKey,
+      });
+      if (res.snapshot) { state.snapshot = res.snapshot; renderLayerTree(); }
+      const original = findByStableKey(`${entry.parentKey}.${entry.index - 1}`);
+      if (original) selectElement(original); else clearSelection();
+      flashStatus();
+      return true;
+    }
+    const original = findByStableKey(`${entry.parentKey}.${entry.index - 1}`);
+    if (!original) {
+      toastError('The original element is gone, so this cannot be redone.');
+      return false;
+    }
+    const res = await api('POST', '/duplicate', {
+      filePath: entry.filePath, elementId: original.framelabId, stableKey: original.stableKey,
+    });
+    if (res.snapshot) { state.snapshot = res.snapshot; renderLayerTree(); }
+    const copy = findByStableKey(`${entry.parentKey}.${entry.index}`);
+    if (copy) selectElement(copy);
+    flashStatus();
     return true;
   } catch (err) {
     toastError(explainUpdateError(err));
@@ -2048,9 +2126,23 @@ function renderHead(el) {
     `<span class="tag">&lt;${escapeHtml(el.tagName)}&gt;</span>${kindBadge}` +
     `<span class="meta">${escapeHtml(basename(state.currentFilePath || ''))}:${el.line}</span>`;
 
+  const dup = document.createElement('button');
+  dup.type = 'button';
+  dup.className = 'head-action';
+  dup.dataset.action = 'duplicate';
+  dup.innerHTML = ICONS.copy;
+  dup.disabled = !el.parentId;
+  dup.setAttribute('aria-label', `Duplicate this ${el.tagName}`);
+  dup.title = el.parentId
+    ? `Duplicate this <${el.tagName}> (${MOD}D)`
+    : 'A component can only return one element, so this one cannot be duplicated';
+  dup.addEventListener('click', duplicateSelected);
+  head.appendChild(dup);
+
   const ask = document.createElement('button');
   ask.type = 'button';
   ask.className = 'head-action';
+  ask.dataset.action = 'agent-context';
   ask.innerHTML = ICONS.agent;
   ask.setAttribute('aria-label', 'Copy this element as context for an AI agent');
   ask.title = 'Copy as agent context — paste into Claude Code, Cursor, or any chat';
@@ -2060,6 +2152,7 @@ function renderHead(el) {
   const del = document.createElement('button');
   del.type = 'button';
   del.className = 'head-action danger';
+  del.dataset.action = 'delete';
   del.innerHTML = ICONS.trash;
   const deletable = !!el.parentId;
   del.disabled = !deletable;
@@ -2448,6 +2541,7 @@ function autoCommitMessage(kind, ctx) {
     }
     case 'move': return `move${fileTag}:${where} ${ctx.position} ${ctx.targetTag}@L${ctx.targetLine}`;
     case 'delete': return `remove${fileTag}:${where}`;
+    case 'duplicate': return `duplicate${fileTag}:${where}`;
     case 'revert-hunk': return `revert${fileTag}: hunk ${ctx.hunkIndex}`;
     case 'revert-file': return `revert${fileTag}`;
     default: return `edit${fileTag}`;
@@ -2699,6 +2793,11 @@ function handleShortcut(e) {
     if (e.shiftKey) redo(); else undo();
     return true;
   }
+  if (mod && String(e.key).toLowerCase() === 'd' && state.selected) {
+    prevent();
+    duplicateSelected();
+    return true;
+  }
   if (mod && !e.shiftKey && !e.altKey) {
     const k = String(e.key).toLowerCase();
     if (k === 'b') { prevent(); togglePanel('left'); return true; }
@@ -2713,6 +2812,11 @@ function handleShortcut(e) {
   if (e.key === 'Delete' || e.key === 'Backspace') {
     prevent();
     deleteSelected();
+    return true;
+  }
+  if (mod && String(e.key).toLowerCase() === 'd') {
+    prevent();
+    duplicateSelected();
     return true;
   }
   if (e.key === 'ArrowUp') {

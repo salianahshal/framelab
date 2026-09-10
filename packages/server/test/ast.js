@@ -479,6 +479,101 @@ test('elements without comments still reorder cleanly', () => {
 
 // ---------------------------------------------------------------------------
 
+console.log('\n=== duplicate ===');
+
+const DUP = `export default function App() {
+  return (
+    <ul className="grid">
+      <li className="card p-4">One</li>
+      <li className="card p-4">Two</li>
+    </ul>
+  );
+}
+`;
+
+test('a duplicate lands directly after the original', () => {
+  withFile(DUP, (file) => {
+    const first = elementsOf(file).find((e) => e.textContent === 'One');
+    const res = ast.duplicateElement(file, first.framelabId);
+    assert.ok(res.ok, JSON.stringify(res));
+    assert.strictEqual(res.index, 1);
+    const after = fs.readFileSync(file, 'utf8');
+    const items = [...after.matchAll(/<li[^>]*>([^<]*)</g)].map((m) => m[1]);
+    assert.deepStrictEqual(items, ['One', 'One', 'Two'], after);
+  });
+});
+
+test('the copy matches the original byte for byte, indentation included', () => {
+  withFile(DUP, (file) => {
+    const first = elementsOf(file).find((e) => e.textContent === 'One');
+    ast.duplicateElement(file, first.framelabId);
+    const lines = fs.readFileSync(file, 'utf8').split('\n');
+    const copies = lines.filter((l) => l.includes('>One<'));
+    assert.strictEqual(copies.length, 2, lines.join('\n'));
+    assert.strictEqual(copies[0], copies[1], 'indentation differs between original and copy');
+  });
+});
+
+test('duplicating brings nested children along', () => {
+  const nested = `export default () => (
+  <div>
+    <section className="a">
+      <h2>Title</h2>
+      <p>Body</p>
+    </section>
+    <footer>end</footer>
+  </div>
+);
+`;
+  withFile(nested, (file) => {
+    const section = elementsOf(file).find((e) => e.className === 'a');
+    assert.ok(ast.duplicateElement(file, section.framelabId).ok);
+    const after = fs.readFileSync(file, 'utf8');
+    assert.strictEqual((after.match(/<h2>Title<\/h2>/g) || []).length, 2, after);
+    assert.strictEqual((after.match(/<section/g) || []).length, 2, after);
+    assert.doesNotThrow(() => ast.extractElements(file));
+  });
+});
+
+test('deleting the copy restores the original file exactly', () => {
+  withFile(DUP, (file) => {
+    const first = elementsOf(file).find((e) => e.textContent === 'One');
+    const res = ast.duplicateElement(file, first.framelabId);
+    const copy = elementsOf(file).find((e) => e.stableKey === `${res.parentKey}.${res.index}`);
+    assert.ok(copy, 'copy not found by stable key');
+    assert.ok(ast.deleteElement(file, copy.framelabId).ok);
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), DUP);
+  });
+});
+
+test('the outermost element refuses to be duplicated', () => {
+  withFile(DUP, (file) => {
+    const root = elementsOf(file).find((e) => e.stableKey === '0');
+    const res = ast.duplicateElement(file, root.framelabId);
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(res.reason, 'cannot-duplicate-root');
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), DUP);
+  });
+});
+
+test('a duplicated element with a cn() className stays editable', () => {
+  const src = `export default ({on}) => (
+  <div>
+    <button className={cn('px-3', on && 'bg-red')}>Go</button>
+  </div>
+);
+`;
+  withFile(src, (file) => {
+    const btn = elementsOf(file).find((e) => e.tagName === 'button');
+    assert.ok(ast.duplicateElement(file, btn.framelabId).ok);
+    const buttons = elementsOf(file).filter((e) => e.tagName === 'button');
+    assert.strictEqual(buttons.length, 2);
+    assert.ok(buttons.every((b) => b.classNameKind === 'call' && b.classNameEditable));
+  });
+});
+
+// ---------------------------------------------------------------------------
+
 console.log(`\n${passed}/${passed + failed} astEngine tests passed`);
 try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
 if (failed) {

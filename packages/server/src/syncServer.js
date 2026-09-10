@@ -508,6 +508,139 @@ function createSyncServer(options = {}) {
     });
   });
 
+  app.post('/duplicate', (req, res) => {
+    const { filePath: rawPath, elementId, stableKey } = req.body || {};
+    if (!rawPath || !elementId) {
+      return res.status(400).json({ error: 'filePath and elementId required' });
+    }
+    const filePath = resolveInside(rootDir, rawPath);
+    if (!filePath) return res.status(403).json({ error: 'path outside project root' });
+    if (!isSupportedFile(filePath)) return res.status(400).json({ error: 'unsupported file' });
+
+    suppress(filePath);
+    const result = astEngine.duplicateElement(filePath, elementId, { stableKey });
+    if (!result.ok) return res.status(409).json({ error: result.reason, detail: result.detail });
+
+    let snap;
+    try { snap = snapshotFile(filePath); }
+    catch (err) { return res.status(500).json({ error: err.message }); }
+    broadcast({ type: 'FILE_SYNC', source: 'duplicate', snapshot: snap });
+    broadcastDiff();
+    res.json({
+      ok: true, snapshot: snap,
+      parentKey: result.parentKey, index: result.index, tagName: result.tagName,
+    });
+  });
+
+  // ---------- Design-system drift ----------
+  //
+  // Every arbitrary value that a project token already covers. Scans one file
+  // or the whole project, and can rewrite them in place.
+  function scanDrift(files) {
+    const opts = themeKeys ? { theme: themeKeys } : null;
+    const results = [];
+    let total = 0;
+    if (!opts) return { available: false, reason: 'no-theme', files: [], total: 0 };
+
+    for (const filePath of files) {
+      let elements;
+      try { elements = astEngine.extractElements(filePath).elements; }
+      catch { continue; }
+      const hits = [];
+      for (const el of elements) {
+        if (!el.className) continue;
+        const drift = tailwindParser.findDrift(el.className, themeKeys);
+        if (!drift.length) continue;
+        hits.push({
+          framelabId: el.framelabId,
+          stableKey: el.stableKey,
+          tagName: el.tagName,
+          line: el.line,
+          editable: el.classNameEditable,
+          drift,
+        });
+        total += drift.length;
+      }
+      if (hits.length) {
+        results.push({ filePath, file: path.relative(rootDir, filePath), elements: hits });
+      }
+    }
+    return { available: true, files: results, total };
+  }
+
+  app.get('/drift', (req, res) => {
+    let files;
+    if (req.query.filePath) {
+      const filePath = resolveInside(rootDir, String(req.query.filePath));
+      if (!filePath) return res.status(403).json({ error: 'path outside project root' });
+      files = [filePath];
+    } else {
+      files = listFiles(rootDir);
+    }
+    try {
+      res.json({ rootDir, ...scanDrift(files) });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/drift/fix', (req, res) => {
+    const { filePath: rawPath, elementId, stableKey } = req.body || {};
+    if (!themeKeys) return res.status(409).json({ error: 'no-theme' });
+    const targets = rawPath ? [resolveInside(rootDir, rawPath)] : listFiles(rootDir);
+    if (targets.some((t) => !t)) {
+      return res.status(403).json({ error: 'path outside project root' });
+    }
+
+    const changed = [];
+    let replaced = 0;
+    for (const filePath of targets) {
+      let elements;
+      try { elements = astEngine.extractElements(filePath).elements; }
+      catch { continue; }
+      const wanted = elementId
+        ? elements.filter((e) => e.framelabId === elementId || e.stableKey === stableKey)
+        : elements;
+      let touched = false;
+      // Every write shifts the byte offsets baked into the ids captured before
+      // it, so re-read between fixes and take one element at a time. Structural
+      // keys are what carry identity across the rewrite.
+      const wantedKeys = new Set(wanted.map((e) => e.stableKey));
+      const done = new Set();
+      for (let pass = 0; pass < 500; pass++) {
+        let current;
+        try { current = astEngine.extractElements(filePath).elements; }
+        catch { break; }
+        const next = current.find((e) =>
+          wantedKeys.has(e.stableKey) &&
+          !done.has(e.stableKey) &&
+          e.className &&
+          e.classNameEditable !== false &&
+          tailwindParser.findDrift(e.className, themeKeys).length > 0);
+        if (!next) break;
+        done.add(next.stableKey);
+        const { className: rewritten, fixed } =
+          tailwindParser.applyDriftFixes(next.className, themeKeys);
+        if (!fixed.length) continue;
+        suppress(filePath);
+        const r = astEngine.updateClassName(filePath, next.framelabId, rewritten, {
+          stableKey: next.stableKey,
+        });
+        if (!r.ok) continue;
+        replaced += fixed.length;
+        touched = true;
+      }
+      if (touched) {
+        changed.push(path.relative(rootDir, filePath));
+        try {
+          broadcast({ type: 'FILE_SYNC', source: 'drift-fix', snapshot: snapshotFile(filePath) });
+        } catch {}
+      }
+    }
+    broadcastDiff();
+    res.json({ ok: true, replaced, files: changed });
+  });
+
   // Put a deleted element back where it was. The only accepted source is a
   // fragment the server itself handed out from /delete, which is what keeps
   // this from being a general "write arbitrary code" endpoint.

@@ -322,6 +322,74 @@ test('placeholder tokens are preserved in position', () => {
 
 // ---------------------------------------------------------------------------
 
+console.log('\n=== design-system drift ===');
+
+const DRIFT_THEME = {
+  colors: {
+    all: [{ name: 'brand', value: '#6e56cf' }, { name: 'white', value: '#ffffff' }],
+    custom: ['brand'],
+  },
+  spacing: { all: ['4', '7', 'gutter'], custom: ['gutter'], values: { '4': '1rem', '7': '1.75rem', gutter: '1.75rem' } },
+  borderRadius: { all: ['card', 'lg'], custom: ['card'], values: { card: '14px', lg: '0.5rem' } },
+  fontSize: { all: ['lg'], custom: [], values: { lg: '1.125rem' } },
+};
+
+test('a hardcoded hex that matches a token is reported', () => {
+  const d = tp.findDrift('bg-[#6e56cf] p-4', DRIFT_THEME);
+  assert.strictEqual(d.length, 1, JSON.stringify(d));
+  assert.strictEqual(d[0].token, 'brand');
+  assert.strictEqual(d[0].suggestedClass, 'bg-brand');
+});
+
+test('hex case and shorthand do not hide a match', () => {
+  assert.strictEqual(tp.findDrift('bg-[#6E56CF]', DRIFT_THEME)[0].token, 'brand');
+  assert.strictEqual(tp.findDrift('text-[#FFF]', DRIFT_THEME)[0].token, 'white');
+});
+
+test('rem and px are compared as the same length', () => {
+  assert.strictEqual(tp.findDrift('p-[16px]', DRIFT_THEME)[0].token, '4');
+  assert.strictEqual(tp.findDrift('p-[1rem]', DRIFT_THEME)[0].token, '4');
+  assert.strictEqual(tp.findDrift('rounded-[14px]', DRIFT_THEME)[0].token, 'card');
+  assert.strictEqual(tp.findDrift('text-[1.125rem]', DRIFT_THEME)[0].token, 'lg');
+});
+
+test('a project token beats a stock step of the same value', () => {
+  // 1.75rem is both `7` and `gutter`; the named one is the better answer.
+  assert.strictEqual(tp.findDrift('p-[1.75rem]', DRIFT_THEME)[0].token, 'gutter');
+});
+
+test('a genuine one-off is left alone', () => {
+  assert.deepStrictEqual(tp.findDrift('bg-[#123456] p-[13px] m-[3px]', DRIFT_THEME), []);
+});
+
+test('values already using tokens report nothing', () => {
+  assert.deepStrictEqual(tp.findDrift('bg-brand p-4 rounded-card', DRIFT_THEME), []);
+});
+
+test('drift is found inside variants and the prefix is kept', () => {
+  const d = tp.findDrift('md:hover:bg-[#6e56cf]', DRIFT_THEME);
+  assert.strictEqual(d.length, 1);
+  assert.strictEqual(d[0].suggestedClass, 'md:hover:bg-brand');
+});
+
+test('per-side spacing keeps its side when rewritten', () => {
+  const d = tp.findDrift('pt-[16px]', DRIFT_THEME);
+  assert.strictEqual(d[0].suggestedClass, 'pt-4');
+});
+
+test('fixing drift rewrites only the drifted tokens, in place', () => {
+  const input = 'flex bg-[#6e56cf] p-[16px] shadow-none bg-[#123456]';
+  const { className, fixed } = tp.applyDriftFixes(input, DRIFT_THEME);
+  assert.strictEqual(className, 'flex bg-brand p-4 shadow-none bg-[#123456]');
+  assert.strictEqual(fixed.length, 2);
+});
+
+test('with no theme there is nothing to compare against', () => {
+  assert.deepStrictEqual(tp.findDrift('bg-[#6e56cf]', null), []);
+});
+
+// ---------------------------------------------------------------------------
+
 console.log(`\n${passed}/${passed + failed} parser tests passed`);
 if (failed) {
   console.log('\nFailures:');

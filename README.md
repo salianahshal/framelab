@@ -81,6 +81,35 @@ an element's children are plain text.
 Every write is re-parsed before it lands: if a change would break the file, it
 is refused and the file is left untouched.
 
+## Duplicating
+
+Select an element and press `⌘D`, or use the copy button in the inspector
+header. The element and everything inside it are copied in as the next sibling,
+indented to match, and the copy becomes the selection so your next edit lands on
+it. `⌘Z` removes it again.
+
+It is the quickest way to add a card to a grid or a row to a list: duplicate,
+then retype the text.
+
+## Finding design-system drift
+
+`bg-[#6e56cf]` and `bg-brand` render the same pixels. Only one of them moves
+when the token does.
+
+Framelab compares every hardcoded value against your `tailwind.config` and
+reports the ones a token already covers. Units are normalised, so `p-[16px]`
+matches a `4` that resolves to `1rem`, and a token you named yourself wins over
+a stock Tailwind step of the same value:
+
+```
+bg-[#6e56cf]   is #6e56cf, which is the "brand" colour  — use bg-brand
+p-[1.75rem]    is 1.75rem, which is the "gutter" token  — use p-gutter
+rounded-[14px] is 14px,    which is the "card" token    — use rounded-card
+```
+
+Genuine one-offs are left alone. Over MCP this is `find_drift` to see it and
+`fix_drift` to apply it, so an agent can clean a whole codebase in one pass.
+
 ## Deleting
 
 Select an element and press `Del`, or use the trash button in the inspector
@@ -100,8 +129,9 @@ component, which would leave the component returning nothing.
 | `Esc` | Deselect |
 | `↑` / `↓` | Select parent / first child |
 | `←` / `→` | Select previous / next sibling |
+| `⌘D` | Duplicate the selected element |
 | `Del` / `⌫` | Delete the selected element |
-| `⌘Z` / `⌘⇧Z` | Undo / redo an edit, a reorder, or a delete |
+| `⌘Z` / `⌘⇧Z` | Undo / redo any edit, reorder, duplicate or delete |
 | `⌘B` / `⌘J` | Toggle the left and right panels |
 
 Shortcuts work whether focus is in the canvas or in the preview.
@@ -153,10 +183,11 @@ element you are looking at, and what your design system actually contains.
   the class string — it cannot reorder your classes or emit one that fails to
   parse.
 
-Thirteen tools are exposed in total: `get_selection`, `list_files`,
+Sixteen tools are exposed in total: `get_selection`, `list_files`,
 `find_elements`, `get_element`, `list_design_tokens`, `update_styles`,
-`update_text`, `move_sibling`, `delete_element`, `restore_element`, `commit`,
-`get_diff`, and `snapshot`. Run the canvas at the same time and you'll watch the
+`update_text`, `move_sibling`, `duplicate_element`, `delete_element`,
+`restore_element`, `find_drift`, `fix_drift`, `commit`, `get_diff`, and
+`snapshot`. Run the canvas at the same time and you'll watch the
 model's edits land live.
 
 If you'd rather paste into a chat window than wire up MCP, the inspector header

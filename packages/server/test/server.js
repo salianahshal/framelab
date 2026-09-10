@@ -362,6 +362,50 @@ async function main() {
     assert.strictEqual(fs.readFileSync(outsideFile, 'utf8'), before);
   });
 
+  console.log('\n=== duplicate ===');
+
+  await test('/duplicate inserts a copy after the original', async () => {
+    const snap = await request(port, 'GET', `/snapshot?filePath=${encodeURIComponent(file)}`);
+    const h2 = snap.body.elements.find((e) => e.tagName === 'h2');
+    const before = fs.readFileSync(file, 'utf8');
+    const res = await request(port, 'POST', '/duplicate', {
+      filePath: file, elementId: h2.framelabId, stableKey: h2.stableKey,
+    });
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    const after = fs.readFileSync(file, 'utf8');
+    assert.strictEqual((after.match(/<h2/g) || []).length, 2, after);
+    assert.strictEqual(res.body.tagName, 'h2');
+
+    // Removing the copy must give back exactly what we started with.
+    const copy = res.body.snapshot.elements
+      .find((e) => e.stableKey === `${res.body.parentKey}.${res.body.index}`);
+    assert.ok(copy, 'copy not addressable by stable key');
+    const del = await request(port, 'POST', '/delete', {
+      filePath: file, elementId: copy.framelabId, stableKey: copy.stableKey,
+    });
+    assert.strictEqual(del.status, 200, JSON.stringify(del.body));
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), before);
+  });
+
+  await test('/duplicate refuses the outermost element', async () => {
+    const snap = await request(port, 'GET', `/snapshot?filePath=${encodeURIComponent(file)}`);
+    const root = snap.body.elements.find((e) => e.stableKey === '0');
+    const before = fs.readFileSync(file, 'utf8');
+    const res = await request(port, 'POST', '/duplicate', {
+      filePath: file, elementId: root.framelabId, stableKey: root.stableKey,
+    });
+    assert.strictEqual(res.status, 409);
+    assert.strictEqual(res.body.error, 'cannot-duplicate-root');
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), before);
+  });
+
+  await test('/duplicate refuses paths outside the project root', async () => {
+    const res = await request(port, 'POST', '/duplicate', {
+      filePath: outsideFile, elementId: 'div|x|1|1',
+    });
+    assert.strictEqual(res.status, 403);
+  });
+
   console.log('\n=== revert ===');
 
   await test('revert-file accepts a repo-relative path', async () => {

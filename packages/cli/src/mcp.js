@@ -277,6 +277,56 @@ function buildTools(rootDir) {
       },
     },
     {
+      name: 'duplicate_element',
+      description:
+        'Copy an element and everything inside it, inserting the copy directly ' +
+        'after the original as its next sibling. Indentation matches its ' +
+        'neighbours.\n\n' +
+        'Use it to add a card to a grid, a row to a list, or a second button — ' +
+        'then update_text and update_styles the copy. Refuses the outermost ' +
+        'element of a component, which has no sibling slot.',
+      inputSchema: {
+        type: 'object',
+        required: ['framelabId'],
+        properties: { framelabId: { type: 'string', description: 'From find_elements' } },
+      },
+    },
+    {
+      name: 'find_drift',
+      description:
+        'Find hardcoded values that a project design token already covers — ' +
+        '`bg-[#6e56cf]` where the config defines `brand`, `p-[16px]` where the ' +
+        'spacing scale has `4`, `rounded-[14px]` where there is a `card` radius.\n\n' +
+        'These render identically today and diverge the moment the token changes, ' +
+        'so they are the measurable form of design-system drift. Units are ' +
+        'normalised, so `1rem` and `16px` match, and a project\'s own token is ' +
+        'preferred over a stock Tailwind step of the same value.\n\n' +
+        'Pass a filePath to scan one file, or omit it to scan the project. ' +
+        'Use fix_drift to apply the replacements.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          filePath: { type: 'string', description: 'One file to scan. Omit to scan everything.' },
+        },
+      },
+    },
+    {
+      name: 'fix_drift',
+      description:
+        'Replace hardcoded values with the project tokens that already match ' +
+        'them, as reported by find_drift. Only the drifted class tokens change; ' +
+        'everything else in the file is untouched.\n\n' +
+        'Scope it with filePath, or omit to fix the whole project. Run find_drift ' +
+        'first and show the user what will change — this rewrites source.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          filePath: { type: 'string', description: 'One file to fix. Omit to fix everything.' },
+          framelabId: { type: 'string', description: 'Fix a single element only.' },
+        },
+      },
+    },
+    {
       name: 'restore_element',
       description:
         'Undo a delete_element by re-inserting the source it returned at the same ' +
@@ -562,6 +612,119 @@ function buildHandlers(rootDir) {
         index: result.index,
         restoreWith: 'restore_element',
       };
+    },
+
+    duplicate_element: async ({ framelabId }) => {
+      const filePath = filePathFromFramelabId(framelabId);
+      const result = ast.duplicateElement(filePath, framelabId);
+      if (!result.ok) {
+        if (result.reason === 'cannot-duplicate-root') {
+          throw new Error(
+            'That is the outermost element of the component, so it has no sibling ' +
+            'slot to duplicate into. Duplicate one of its children instead.'
+          );
+        }
+        throw new Error(`Duplicate failed: ${result.reason}`);
+      }
+      lastWriteAt = Date.now();
+      const elements = ast.extractElements(filePath).elements;
+      const copy = elements.find((e) => e.stableKey === `${result.parentKey}.${result.index}`);
+      return {
+        ok: true,
+        file: relPathFrom(rootDir, filePath),
+        tagName: result.tagName,
+        index: result.index,
+        copyFramelabId: copy ? copy.framelabId : null,
+        next: 'Edit the copy with update_text / update_styles using copyFramelabId.',
+      };
+    },
+
+    find_drift: async ({ filePath }) => {
+      const themeTokens = await loadThemeTokens();
+      if (!themeTokens) {
+        return {
+          available: false,
+          reason: 'no-tailwind-config',
+          hint: 'No tailwind.config could be resolved, so there are no tokens to compare against.',
+        };
+      }
+      const targets = filePath
+        ? [path.isAbsolute(filePath) ? filePath : path.resolve(rootDir, filePath)]
+        : listFilesRecursive(rootDir);
+
+      const files = [];
+      let total = 0;
+      for (const f of targets) {
+        let elements;
+        try { elements = ast.extractElements(f).elements; }
+        catch { continue; }
+        const hits = [];
+        for (const el of elements) {
+          if (!el.className) continue;
+          const drift = tailwind.findDrift(el.className, themeTokens);
+          if (!drift.length) continue;
+          total += drift.length;
+          hits.push({
+            framelabId: el.framelabId,
+            tagName: el.tagName,
+            line: el.line,
+            editable: el.classNameEditable,
+            replacements: drift.map((d) => ({
+              from: d.raw, to: d.suggestedClass, token: d.token, value: d.tokenValue,
+            })),
+          });
+        }
+        if (hits.length) files.push({ file: relPathFrom(rootDir, f), elements: hits });
+      }
+      return {
+        available: true,
+        total,
+        files,
+        summary: total
+          ? `${total} hardcoded value${total === 1 ? '' : 's'} across ` +
+            `${files.length} file${files.length === 1 ? '' : 's'} already have a project token.`
+          : 'No drift: every value in scope is either a token or a deliberate one-off.',
+        next: total ? 'Call fix_drift to apply these, optionally scoped to one file.' : undefined,
+      };
+    },
+
+    fix_drift: async ({ filePath, framelabId }) => {
+      const themeTokens = await loadThemeTokens();
+      if (!themeTokens) throw new Error('No tailwind.config could be resolved.');
+      const targets = filePath
+        ? [path.isAbsolute(filePath) ? filePath : path.resolve(rootDir, filePath)]
+        : listFilesRecursive(rootDir);
+
+      const changed = [];
+      let replaced = 0;
+      for (const f of targets) {
+        const done = new Set();
+        let touched = false;
+        // Re-read between writes: each one moves the offsets in the ids.
+        for (let pass = 0; pass < 500; pass++) {
+          let elements;
+          try { elements = ast.extractElements(f).elements; }
+          catch { break; }
+          const next = elements.find((e) =>
+            (!framelabId || e.framelabId === framelabId) &&
+            !done.has(e.stableKey) &&
+            e.className && e.classNameEditable !== false &&
+            tailwind.findDrift(e.className, themeTokens).length > 0);
+          if (!next) break;
+          done.add(next.stableKey);
+          const { className, fixed } = tailwind.applyDriftFixes(next.className, themeTokens);
+          if (!fixed.length) continue;
+          const r = ast.updateClassName(f, next.framelabId, className, {
+            stableKey: next.stableKey,
+          });
+          if (!r.ok) continue;
+          replaced += fixed.length;
+          touched = true;
+        }
+        if (touched) changed.push(relPathFrom(rootDir, f));
+      }
+      lastWriteAt = Date.now();
+      return { ok: true, replaced, files: changed };
     },
 
     restore_element: async ({ filePath, parentKey, index, source }) => {

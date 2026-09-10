@@ -144,13 +144,24 @@ const DEFAULT_KEYS = {
   fontWeight: ['thin', 'extralight', 'light', 'normal', 'medium', 'semibold', 'bold', 'extrabold', 'black'],
 };
 
-function partitionKeys(keys, defaultKeys) {
+function partitionKeys(keys, defaultKeys, values) {
   const dset = new Set(defaultKeys);
   const all = [...keys];
   const custom = [];
   const defaults = [];
   for (const k of keys) (dset.has(k) ? defaults : custom).push(k);
-  return { all, custom, defaults };
+  const out = { all, custom, defaults };
+  // Resolved values let us answer the reverse question: "is this hardcoded
+  // `[16px]` just the `4` from your spacing scale written the long way?"
+  if (values) {
+    out.values = {};
+    for (const k of keys) {
+      const v = values[k];
+      if (typeof v === 'string') out.values[k] = v;
+      else if (Array.isArray(v) && typeof v[0] === 'string') out.values[k] = v[0];
+    }
+  }
+  return out;
 }
 
 function extractTokens(theme, defaultColorKeys) {
@@ -168,11 +179,13 @@ function extractTokens(theme, defaultColorKeys) {
 
   return {
     colors: { all: allColors, custom: customColors, defaults: defaultColors },
-    spacing: partitionKeys(spacingKeys, DEFAULT_KEYS.spacing),
-    fontSize: partitionKeys(Object.keys(theme.fontSize || {}), DEFAULT_KEYS.fontSize),
-    borderRadius: partitionKeys(Object.keys(theme.borderRadius || {}), DEFAULT_KEYS.borderRadius),
-    boxShadow: partitionKeys(Object.keys(theme.boxShadow || {}), DEFAULT_KEYS.boxShadow),
-    fontWeight: partitionKeys(Object.keys(theme.fontWeight || {}), DEFAULT_KEYS.fontWeight),
+    spacing: partitionKeys(spacingKeys, DEFAULT_KEYS.spacing, theme.spacing),
+    fontSize: partitionKeys(Object.keys(theme.fontSize || {}), DEFAULT_KEYS.fontSize, theme.fontSize),
+    borderRadius: partitionKeys(
+      Object.keys(theme.borderRadius || {}), DEFAULT_KEYS.borderRadius, theme.borderRadius),
+    boxShadow: partitionKeys(Object.keys(theme.boxShadow || {}), DEFAULT_KEYS.boxShadow, theme.boxShadow),
+    fontWeight: partitionKeys(
+      Object.keys(theme.fontWeight || {}), DEFAULT_KEYS.fontWeight, theme.fontWeight),
   };
 }
 

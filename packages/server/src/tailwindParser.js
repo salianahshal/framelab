@@ -925,6 +925,156 @@ function describeScale(prop) {
 }
 
 // ---------------------------------------------------------------------------
+// Design-system drift
+// ---------------------------------------------------------------------------
+//
+// An arbitrary value is a deliberate escape hatch — until it turns out to be a
+// token you already own, written the long way. `p-[16px]` and `p-4` render the
+// same pixels, but only one of them moves when the scale does. Finding those is
+// the difference between a design system and a folder of components.
+
+const ROOT_FONT_PX = 16;
+
+function normalizeColor(value) {
+  if (!value) return null;
+  let v = String(value).trim().toLowerCase().replace(/_/g, ' ');
+  const rgb = v.match(/^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+  if (rgb) {
+    return '#' + [1, 2, 3]
+      .map((i) => Number(rgb[i]).toString(16).padStart(2, '0')).join('');
+  }
+  if (!v.startsWith('#')) return v;
+  const hex = v.slice(1);
+  if (hex.length === 3) return '#' + hex.split('').map((c) => c + c).join('');
+  if (hex.length === 8) return '#' + hex.slice(0, 6);
+  return '#' + hex;
+}
+
+// Reduce a CSS length to pixels so `1rem` and `16px` compare equal.
+function toPixels(value) {
+  if (value == null) return null;
+  const v = String(value).trim();
+  const m = v.match(/^(-?\d*\.?\d+)(px|rem|em)?$/);
+  if (!m) return null;
+  const n = parseFloat(m[1]);
+  if (Number.isNaN(n)) return null;
+  const unit = m[2] || 'px';
+  if (unit === 'px') return n;
+  return n * ROOT_FONT_PX;
+}
+
+const DRIFT_CATEGORY = {
+  background: 'colors', textColor: 'colors', borderColor: 'colors', shadowColor: 'colors',
+  fontSize: 'fontSize',
+  borderRadius: 'borderRadius',
+  boxShadow: 'boxShadow',
+};
+for (const prop of ['padding', 'margin', 'gap', 'width', 'height', 'minWidth',
+  'minHeight', 'maxWidth', 'maxHeight', 'size', 'top', 'right', 'bottom', 'left',
+  'inset', 'insetX', 'insetY']) {
+  DRIFT_CATEGORY[prop] = 'spacing';
+}
+
+// Project-specific names come first: when both `gutter` and the stock `7` are
+// 1.75rem, the one the team chose to name is the better suggestion.
+function themeEntries(theme, category) {
+  if (!theme) return [];
+  if (category === 'colors') {
+    const colors = theme.colors;
+    const all = Array.isArray(colors) ? colors : (colors && colors.all) || [];
+    const custom = new Set(
+      ((colors && colors.custom) || []).map((c) => (typeof c === 'string' ? c : c.name))
+    );
+    const usable = all
+      .filter((c) => c && c.name && typeof c.value === 'string')
+      .map((c) => ({ name: c.name, value: c.value }));
+    return [
+      ...usable.filter((c) => custom.has(c.name)),
+      ...usable.filter((c) => !custom.has(c.name)),
+    ];
+  }
+  const part = theme[category];
+  if (!part || !part.values) return [];
+  const custom = new Set(part.custom || []);
+  const entries = Object.entries(part.values).map(([name, value]) => ({ name, value }));
+  return [
+    ...entries.filter((e) => custom.has(e.name)),
+    ...entries.filter((e) => !custom.has(e.name)),
+  ];
+}
+
+/**
+ * Find arbitrary values in a class string that a project token already covers.
+ * Returns one entry per token that could be replaced, with the class to use.
+ */
+function findDrift(className, theme, options) {
+  if (!theme) return [];
+  const keys = options && options.keys ? options.keys : buildKeySets(theme);
+  const tokens = tokenize(className, keys);
+  const out = [];
+
+  for (const token of tokens) {
+    if (token.kind !== 'class' || !token.prop) continue;
+    if (!isArbitrary(token.value)) continue;
+    const category = DRIFT_CATEGORY[token.prop];
+    if (!category) continue;
+
+    const literal = String(token.value).slice(1, -1);
+    const entries = themeEntries(theme, category);
+    if (!entries.length) continue;
+
+    let match = null;
+    if (category === 'colors') {
+      const target = normalizeColor(literal);
+      match = entries.find((e) => normalizeColor(e.value) === target);
+    } else {
+      const target = toPixels(literal);
+      if (target === null) continue;
+      match = entries.find((e) => {
+        const px = toPixels(e.value);
+        return px !== null && Math.abs(px - target) < 0.01;
+      });
+    }
+    if (!match) continue;
+
+    const body = renderBody(token.prop, match.name, token.side || 'all');
+    if (!body) continue;
+    const suggestedClass = withVariants(token.variants, token.important, body);
+    if (suggestedClass === token.raw) continue;
+
+    out.push({
+      raw: token.raw,
+      prop: token.prop,
+      value: token.value,
+      token: match.name,
+      tokenValue: match.value,
+      suggestedClass,
+      variants: token.variants,
+      message: `${token.raw} is ${match.value}, which is the "${match.name}" ` +
+        `${category === 'colors' ? 'colour' : 'token'} — use ${suggestedClass}`,
+    });
+  }
+  return out;
+}
+
+/** Rewrite a class string, replacing drifted values with their tokens. */
+function applyDriftFixes(className, theme, options) {
+  const keys = options && options.keys ? options.keys : buildKeySets(theme);
+  const drift = findDrift(className, theme, { keys });
+  if (!drift.length) return { className, fixed: [] };
+  const bySource = new Map(drift.map((d) => [d.raw, d.suggestedClass]));
+  const tokens = tokenize(className, keys);
+  const fixed = [];
+  for (const token of tokens) {
+    const replacement = bySource.get(token.raw);
+    if (!replacement) continue;
+    fixed.push({ from: token.raw, to: replacement });
+    token.raw = replacement;
+  }
+  return { className: stringifyTokens(tokens), fixed };
+}
+
+// ---------------------------------------------------------------------------
 // Public API (back-compatible surface)
 // ---------------------------------------------------------------------------
 
@@ -994,6 +1144,10 @@ module.exports = {
   readVariant,
   validateValue,
   validateEdits,
+  findDrift,
+  applyDriftFixes,
+  toPixels,
+  normalizeColor,
   knownValuesFor,
   suggestionsFor,
   PROP_ALIASES,
