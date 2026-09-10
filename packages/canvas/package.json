@@ -1,7 +1,7 @@
 {
   "name": "@framelab/canvas",
-  "version": "0.1.0",
-  "description": "Framelab canvas UI \u2014 static files served by @framelab/server.",
+  "version": "0.2.0",
+  "description": "Framelab canvas UI — static files served by @framelab/server.",
   "license": "MIT",
   "author": "salianahshal2 <salianahshal21@gmail.com>",
   "repository": {

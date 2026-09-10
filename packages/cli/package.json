@@ -1,6 +1,6 @@
 {
   "name": "framelab",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Visual editor CLI for Next.js + Tailwind. No cloud, no sandbox \u2014 edits your local files with byte-clean diffs.",
   "license": "MIT",
   "author": "salianahshal2 <salianahshal21@gmail.com>",
@@ -34,8 +34,8 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@framelab/babel-plugin": "^0.1.0",
-    "@framelab/server": "^0.1.0"
+    "@framelab/babel-plugin": "^0.2.0",
+    "@framelab/server": "^0.2.0"
   },
   "optionalDependencies": {
     "puppeteer-core": "^25.0.0"

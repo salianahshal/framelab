@@ -1,6 +1,6 @@
 {
   "name": "@framelab/babel-plugin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Babel plugin that tags JSX elements with data-framelab-id for the Framelab canvas.",
   "license": "MIT",
   "author": "salianahshal2 <salianahshal21@gmail.com>",
