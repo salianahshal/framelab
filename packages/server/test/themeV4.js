@@ -200,9 +200,17 @@ async function main() {
   }
 
   divider('v3 projects are unaffected');
-  const v3 = await themeEngine.loadTheme(path.join(__dirname, '..', '..', '..', 'examples', 'test-next-app'));
-  check('still read as v3', v3.tailwind, 3);
-  check('v3 config file', path.basename(v3.configFile || ''), 'tailwind.config.js');
+  // Reading a v3 config needs the example app's own tailwindcss install, which
+  // a fresh clone does not have — examples/ is not a workspace. Skip out loud
+  // rather than failing, the same way run.js does for the same reason.
+  const v3Dir = path.join(__dirname, '..', '..', '..', 'examples', 'test-next-app');
+  if (!fs.existsSync(path.join(v3Dir, 'node_modules', 'tailwindcss'))) {
+    console.log('  skipped (tailwindcss not installed in examples/test-next-app)');
+  } else {
+    const v3 = await themeEngine.loadTheme(v3Dir);
+    check('still read as v3', v3.tailwind, 3);
+    check('v3 config file', path.basename(v3.configFile || ''), 'tailwind.config.js');
+  }
 
   console.log('\nall themeV4 checks passed');
 }
