@@ -194,21 +194,23 @@ function extractTokens(theme, defaultColorKeys) {
 }
 
 async function loadTheme(rootDir) {
-  // v4 first when the project is on v4: a repo mid-migration can still have a
-  // stale tailwind.config.js that Tailwind itself is no longer reading, and
-  // showing tokens the build ignores is worse than showing none.
   const installed = installedMajor(rootDir);
-  if (installed && installed.major >= 4) {
+  const configFile = findConfigFile(rootDir);
+
+  // Try the CSS path when the installed Tailwind says v4, and also when there
+  // is no config file at all — the installed-version check is a hint, not a
+  // gate. Under pnpm, Yarn PnP, or a monorepo that hoists tailwindcss out of
+  // reach, resolving the package fails while the project is plainly on v4, and
+  // gating on it would report no design system for a project that has one.
+  // findCssEntry only matches a stylesheet that imports Tailwind or declares
+  // @theme, so it is the evidence, not a guess.
+  if ((installed && installed.major >= 4) || !configFile) {
     const v4 = loadThemeV4(rootDir);
     if (v4.tokens) return v4;
-    // Fall through only if there is a config to fall through to.
-    if (!findConfigFile(rootDir)) return v4;
+    if (!configFile) return v4;
   }
 
-  const configFile = findConfigFile(rootDir);
   if (!configFile) {
-    // No config and no v4 stylesheet: say which, so the canvas can explain it.
-    if (installed && installed.major >= 4) return loadThemeV4(rootDir);
     return { found: false, configFile: null, tokens: null, reason: 'no-config' };
   }
 

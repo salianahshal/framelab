@@ -3,6 +3,7 @@
 // Tailwind v4 theme reading: the @theme CSS blocks that replaced
 // tailwind.config.js, read into the same token shape the v3 path produces.
 
+const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
 
@@ -166,6 +167,37 @@ async function main() {
   divider('a genuine one-off is left alone');
   const oneOff = tailwindParser.findDrift('bg-[#123456] p-[13px]', t);
   check('no false positives', oneOff.length, 0);
+
+  divider('the v4 example app still parses');
+  // Nothing boots examples/test-next-app-v4 in CI, so this is what stops it
+  // rotting into a fixture that looks fine and no longer works. Only project
+  // tokens are asserted — those come from its own stylesheet, so this holds
+  // whether or not anyone has run npm install in there.
+  const example = await themeEngine.loadTheme(
+    path.join(__dirname, '..', '..', '..', 'examples', 'test-next-app-v4'));
+  check('read as v4', example.tailwind, 4);
+  check('its tokens resolve',
+    example.tokens.colors.custom.map((c) => `${c.name}=${c.value}`).sort(),
+    ['background=#ffffff', 'brand=#7445d1', 'foreground=#0a0a0a', 'surface=#f6f5f9']);
+  check('its calc() radius resolves', example.tokens.borderRadius.values.card, '0.875rem');
+
+  divider('an unresolvable tailwindcss install does not hide a v4 theme');
+  // pnpm, Yarn PnP and hoisting monorepos all break `require.resolve
+  // ('tailwindcss')` from the project root. The stylesheet is the evidence the
+  // project is on v4, so the version check must not gate the CSS path.
+  const hidden = path.join(__dirname, 'fixtures', 'v4-app', 'node_modules');
+  const parked = hidden + '.parked';
+  fs.renameSync(hidden, parked);
+  try {
+    const blind = await themeEngine.loadTheme(FIXTURE);
+    check('still read as v4', blind.tailwind, 4);
+    check('project tokens still resolve',
+      (blind.tokens.colors.all.find((c) => c.name === 'brand') || {}).value, '#6e56cf');
+    // Only the stock layer is lost, and the canvas groups tokens by that.
+    check('stock palette is empty without the install', blind.tokens.colors.defaults.length, 0);
+  } finally {
+    fs.renameSync(parked, hidden);
+  }
 
   divider('v3 projects are unaffected');
   const v3 = await themeEngine.loadTheme(path.join(__dirname, '..', '..', '..', 'examples', 'test-next-app'));
