@@ -1,5 +1,7 @@
 'use strict';
 
+const { colorToHex } = require('./cssTheme');
+
 // Tailwind class-string model.
 //
 // The central invariant: a className is an ORDERED LIST OF TOKENS, and an edit
@@ -937,13 +939,19 @@ const ROOT_FONT_PX = 16;
 
 function normalizeColor(value) {
   if (!value) return null;
+  // Tailwind writes spaces as underscores inside arbitrary values.
   let v = String(value).trim().toLowerCase().replace(/_/g, ' ');
   const rgb = v.match(/^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
   if (rgb) {
     return '#' + [1, 2, 3]
       .map((i) => Number(rgb[i]).toString(16).padStart(2, '0')).join('');
   }
-  if (!v.startsWith('#')) return v;
+  if (!v.startsWith('#')) {
+    // oklch() and hsl() reduce to hex so a hardcoded `bg-[oklch(…)]` can still
+    // be recognised as a token you already own — the usual shape on Tailwind v4.
+    const converted = colorToHex(v);
+    return converted.startsWith('#') ? normalizeColor(converted) : v;
+  }
   const hex = v.slice(1);
   if (hex.length === 3) return '#' + hex.split('').map((c) => c + c).join('');
   if (hex.length === 8) return '#' + hex.slice(0, 6);

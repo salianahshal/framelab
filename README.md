@@ -30,8 +30,9 @@ Framelab does neither.
 - **Byte-surgical diffs.** Only the tokens you actually changed are rewritten.
   Class order, unrecognised utilities, variants, comments and import order all
   survive untouched — `git diff` stays reviewable.
-- **Theme-aware.** Colors, spacing, and radii come from your own
-  `tailwind.config.{js,ts}`, so you edit in `brand` and `card`, not `#6e56cf`
+- **Theme-aware, on Tailwind v3 and v4.** Colors, spacing, and radii come from
+  your own design system — `tailwind.config.{js,ts}` on v3, or the `@theme`
+  blocks in your CSS on v4 — so you edit in `brand` and `card`, not `#6e56cf`
   and `14px`.
 - **Responsive and state styles are values, not strings.** Pick `md` or `hover`
   in the inspector and edit that variant directly; the base styles stay put.
@@ -96,7 +97,7 @@ then retype the text.
 `bg-[#6e56cf]` and `bg-brand` render the same pixels. Only one of them moves
 when the token does.
 
-Framelab compares every hardcoded value against your `tailwind.config` and
+Framelab compares every hardcoded value against your design system and
 reports the ones a token already covers. Units are normalised, so `p-[16px]`
 matches a `4` that resolves to `1rem`, and a token you named yourself wins over
 a stock Tailwind step of the same value:
@@ -166,7 +167,7 @@ element you are looking at, and what your design system actually contains.
              ▼
   Claude Code / Cursor  ──  update_styles({ props, variants })
                                         │
-                              validated against tailwind.config
+                            validated against your design system
                                         ▼
                                 surgical write to your source
 ```
@@ -176,7 +177,7 @@ element you are looking at, and what your design system actually contains.
   the four buttons you meant. The agent gets the exact source line, the parsed
   Tailwind values, the ancestor chain, and which breakpoint you have open in the
   inspector.
-- **`update_styles` validates against your `tailwind.config`.** A model that
+- **`update_styles` validates against your design system.** A model that
   writes `bg-embr` gets *"not in this project's colour palette. Did you mean
   ember?"* rather than a class Tailwind silently drops. Edits are structured
   (`{prop, value, variants}`), so the model chooses values while Framelab renders
@@ -256,6 +257,14 @@ don't have to retype flags.
 
 - **Node.js >= 18**
 - **Next.js + Tailwind CSS.** `framelab init` refuses to run on anything else.
+  Both Tailwind majors are read: `tailwind.config.{js,ts,cjs,mjs}` on v3, and
+  `@theme` blocks (including `@theme inline` over `:root`, as shadcn/ui
+  generates) on v4. On v4 the tokens are resolved through `var()` and `calc()`
+  and oklch is converted, so drift detection and the inspector see real values.
+- **Turbopack is not supported yet.** `framelab init` writes `babel.config.js`,
+  which Turbopack refuses to run alongside — on Next.js 16, where Turbopack is
+  the default, you need `next dev --webpack` until the loader-based install
+  lands.
 - **Pages Router is the supported path.** v0.1 targets Pages Router. App Router
   partly works — the babel plugin tags client components, but React Server
   Components are skipped, so those elements aren't clickable.
@@ -298,6 +307,16 @@ Tailwind app used as the integration fixture. Its `tailwind.config.js` custom
 theme is asserted by the server's themeEngine tests — if you change the
 `brand`, `surface`, or `accent` tokens, the `card` radius, the `gutter`
 spacing, or the `card` shadow, update `packages/server/test/run.js` to match.
+
+[`examples/test-next-app-v4`](examples/test-next-app-v4) is the same app on
+Tailwind v4: no `tailwind.config.js`, tokens in `@theme` blocks, and a page
+written half in tokens and half in hardcoded values so drift detection has
+something to find. `npm run dev` there serves on port 3135.
+
+[`packages/server/test/fixtures/v4-app`](packages/server/test/fixtures/v4-app)
+is the Tailwind v4 counterpart: a shadcn-shaped `@theme inline` stylesheet over
+`:root`, a split `@import`, and a stubbed `tailwindcss` install so the loader
+resolves real v4 defaults. It is read, never built.
 
 [`examples/click-test-harness.html`](examples/click-test-harness.html) exercises
 the click runtime in isolation.

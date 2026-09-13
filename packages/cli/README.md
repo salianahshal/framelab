@@ -24,7 +24,8 @@ edits, no formatting churn, no cloud round-trip.
   server on localhost and edits files in place.
 - **Byte-surgical diffs.** Only the `className` value changes. Formatting,
   comments, and import order survive untouched.
-- **Theme-aware.** Values come from your own `tailwind.config.{js,ts}`, so you
+- **Theme-aware.** Values come from your own design system — `tailwind.config`
+  on Tailwind v3, `@theme` blocks in CSS on v4 — so you
   edit in `brand` and `card`, not `#6e56cf` and `14px`.
 - **Your git workflow, unchanged.** Edits land in the working tree. Review,
   revert a hunk, or commit as usual.
@@ -124,7 +125,7 @@ the model guess at class strings.
 | `list_files` | List all `.tsx`/`.jsx` files in the project |
 | `find_elements` | Search elements by tag, className substring, or text |
 | `get_element` | Full element details + parsed Tailwind props |
-| `list_design_tokens` | Your `tailwind.config` tokens (colors, spacing, etc.) |
+| `list_design_tokens` | Your design-system tokens (colors, spacing, etc.) |
 | `update_styles` | Edit Tailwind classes, base or per-variant |
 | `update_text` | Replace an element's text content |
 | `move_sibling` | Reorder siblings (same parent only) |
@@ -143,7 +144,7 @@ Two of these change how it feels to work with an agent:
   in the canvas, then say "make this bigger" — no file paths, no grepping. The
   agent gets the exact source line, the parsed Tailwind values, the ancestor
   chain, and which breakpoint you have open in the inspector.
-- **`update_styles` validates against your `tailwind.config`.** A model that
+- **`update_styles` validates against your design system.** A model that
   writes `bg-embr` gets *"not in this project's colour palette. Did you mean
   ember?"* rather than a class Tailwind silently drops. Edits are structured
   (`{prop, value, variants}`), so the model chooses values while Framelab
@@ -159,7 +160,7 @@ Full setup per client is in
 | | |
 | --- | --- |
 | **Select** | Click any element. Hover outlines, a layer tree, and a breadcrumb show where you are. `↑`/`↓` walk to the parent or first child, `←`/`→` to siblings, `Esc` deselects. |
-| **Restyle** | Spacing is a box model, colours and tokens open compact popovers filled from your own `tailwind.config`. No full-height dropdowns. |
+| **Restyle** | Spacing is a box model, colours and tokens open compact popovers filled from your own design system. No full-height dropdowns. |
 | **Responsive & state** | Pick `sm`…`2xl` or `hover`/`focus`/`dark` and edit that variant directly. The canvas widens to the breakpoint so you can see what you're changing. |
 | **Rewrite text** | Edit an element's text when its children are plain text. |
 | **Duplicate** | `⌘D` copies the element in as its next sibling and selects the copy. |
@@ -171,7 +172,7 @@ Full setup per client is in
 
 `bg-[#6e56cf]` and `bg-brand` render identically and diverge the moment the
 token changes. `find_drift` compares every hardcoded value against your
-`tailwind.config` and reports the ones a token already covers — units
+design system and reports the ones a token already covers — units
 normalised, so `p-[16px]` matches a `4` that resolves to `1rem`. `fix_drift`
 applies them. Genuine one-offs are left alone.
 

@@ -1,0 +1,5 @@
+/* Split out of globals.css — an @import the loader has to follow. */
+@theme {
+  --color-brand: #6e56cf;
+  --color-brand-muted: oklch(70.5% 0.213 47.604);
+}

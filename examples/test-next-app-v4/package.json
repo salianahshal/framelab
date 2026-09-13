@@ -1,0 +1,25 @@
+{
+  "name": "test-next-app-v4",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3135",
+    "build": "next build",
+    "start": "next start -p 3135"
+  },
+  "dependencies": {
+    "@babel/runtime": "^7.29.2",
+    "next": "14.2.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@framelab/babel-plugin": "file:../../packages/babel-plugin",
+    "@tailwindcss/postcss": "^4.1.0",
+    "@types/node": "20.12.12",
+    "@types/react": "18.3.3",
+    "@types/react-dom": "18.3.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "5.4.5"
+  }
+}

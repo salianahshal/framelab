@@ -1,4 +1,7 @@
 node_modules/
+
+# …except the stubbed Tailwind install the v4 theme fixture resolves against
+!packages/server/test/fixtures/**/node_modules/
 .next/
 .DS_Store
 *.log

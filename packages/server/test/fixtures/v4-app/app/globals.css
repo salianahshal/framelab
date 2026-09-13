@@ -1,0 +1,33 @@
+@import "tailwindcss";
+@import "./brand.css";
+
+/* The design system, shadcn/ui style: tokens reference plain variables. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --radius-card: var(--radius);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-lg: calc(var(--radius) + 4px);
+}
+
+@theme {
+  --spacing-gutter: 1.75rem;
+  --text-hero: 3.5rem;
+  --text-hero--line-height: 1.05;
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  --font-weight-chonk: 850;
+  --color-legacy: 210 40% 96%;
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: #6e56cf;
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+}

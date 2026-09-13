@@ -24,7 +24,7 @@
   },
   "scripts": {
     "start": "node bin/framelab-server.js",
-    "test": "node test/parser.js && node test/ast.js && node test/server.js && node test/run.js",
+    "test": "node test/parser.js && node test/ast.js && node test/themeV4.js && node test/server.js && node test/run.js",
     "prepublishOnly": "npm test"
   },
   "dependencies": {

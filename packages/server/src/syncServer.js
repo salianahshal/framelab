@@ -145,7 +145,7 @@ function createSyncServer(options = {}) {
   const suppressedFiles = new Map();
 
   // Theme tokens make class parsing exact (`rounded-card` is a radius, not
-  // junk). Loaded once at boot and refreshed when tailwind.config changes.
+  // junk). Loaded once at boot and refreshed when the theme source changes.
   let themeCache = null;
   let themeKeys = null;
 
@@ -824,7 +824,14 @@ function createSyncServer(options = {}) {
   });
 
   function isThemeConfig(filePath) {
-    return themeEngine.CONFIG_CANDIDATES.includes(path.basename(filePath));
+    if (themeEngine.CONFIG_CANDIDATES.includes(path.basename(filePath))) return true;
+    // On Tailwind v4 the design system lives in CSS. loadTheme reports which
+    // stylesheets it read, @imports included, so editing any of them reloads
+    // the tokens the way editing tailwind.config.js does on v3.
+    const sources = themeCache && themeCache.sources;
+    if (!sources || !sources.length) return false;
+    const resolved = path.resolve(filePath);
+    return sources.some((s) => path.resolve(s) === resolved);
   }
 
   watcher.on('change', (filePath) => {

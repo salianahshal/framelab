@@ -6,12 +6,14 @@
 // fontWeight. The point is to show *the user's* design system in the
 // swatches/dropdowns rather than a generic Tailwind palette.
 //
-// TS configs (tailwind.config.ts) aren't supported yet — they need an on-the-fly
-// TS loader (jiti / esbuild). For now we detect them and fall back.
+// Tailwind v4 has no config file — its tokens live in `@theme` blocks in CSS.
+// That path lives in themeV4.js and returns the same token shape; loadTheme
+// picks between them by looking at what the project actually has.
 
 const fs = require('fs');
 const path = require('path');
 const Module = require('module');
+const { loadThemeV4, installedMajor } = require('./themeV4');
 
 const CONFIG_CANDIDATES = [
   // Prefer .ts first since modern Next.js / shadcn scaffolds default to it.
@@ -25,14 +27,16 @@ const CONFIG_CANDIDATES = [
 
 function findConfigFile(rootDir) {
   for (const name of CONFIG_CANDIDATES) {
-    const full = path.join(rootDir, name);
+    // Absolute: the config is later handed to require(), which would read a
+    // relative path as a module specifier and fail to find it.
+    const full = path.resolve(rootDir, name);
     if (fs.existsSync(full)) return full;
   }
   return null;
 }
 
 function projectRequire(rootDir) {
-  return Module.createRequire(path.join(rootDir, 'package.json'));
+  return Module.createRequire(path.resolve(rootDir, 'package.json'));
 }
 
 function loadResolveConfig(rootDir) {
@@ -190,8 +194,21 @@ function extractTokens(theme, defaultColorKeys) {
 }
 
 async function loadTheme(rootDir) {
+  // v4 first when the project is on v4: a repo mid-migration can still have a
+  // stale tailwind.config.js that Tailwind itself is no longer reading, and
+  // showing tokens the build ignores is worse than showing none.
+  const installed = installedMajor(rootDir);
+  if (installed && installed.major >= 4) {
+    const v4 = loadThemeV4(rootDir);
+    if (v4.tokens) return v4;
+    // Fall through only if there is a config to fall through to.
+    if (!findConfigFile(rootDir)) return v4;
+  }
+
   const configFile = findConfigFile(rootDir);
   if (!configFile) {
+    // No config and no v4 stylesheet: say which, so the canvas can explain it.
+    if (installed && installed.major >= 4) return loadThemeV4(rootDir);
     return { found: false, configFile: null, tokens: null, reason: 'no-config' };
   }
 
@@ -211,7 +228,7 @@ async function loadTheme(rootDir) {
     const userConfig = await loadUserConfig(configFile);
     const full = resolveConfig(userConfig);
     const tokens = extractTokens(full.theme, defaultColorKeys);
-    return { found: true, configFile, tokens };
+    return { found: true, configFile, tokens, tailwind: 3 };
   } catch (err) {
     return {
       found: true,
@@ -225,6 +242,8 @@ async function loadTheme(rootDir) {
 
 module.exports = {
   loadTheme,
+  loadThemeV4,
+  installedMajor,
   loadUserConfig,
   findConfigFile,
   extractTokens,
