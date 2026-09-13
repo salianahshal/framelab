@@ -34,7 +34,8 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node test/doctor.js"
+    "test": "node test/doctor.js",
+    "prepublishOnly": "npm test"
   },
   "dependencies": {
     "@framelab/babel-plugin": "^0.2.0",
