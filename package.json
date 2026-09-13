@@ -11,5 +11,5 @@
     "test": "npm test --workspace @framelab/babel-plugin --workspace @framelab/server --workspace framelab",
     "publish-all": "npm test && npm publish --workspace @framelab/babel-plugin --workspace @framelab/canvas --workspace @framelab/server --workspace framelab"
   },
-  "version": "0.2.0"
+  "version": "0.3.0"
 }

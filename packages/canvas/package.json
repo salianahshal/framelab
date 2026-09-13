@@ -1,6 +1,6 @@
 {
   "name": "@framelab/canvas",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Framelab canvas UI — static files served by @framelab/server.",
   "license": "MIT",
   "author": "salianahshal2 <salianahshal21@gmail.com>",
