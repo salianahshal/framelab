@@ -5,6 +5,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const t = require('./term');
 const { findRunningDevServer, isPortFree, findFreePort, detectFramework } = require('./detect');
+const doctor = require('./doctor');
 
 function loadConfig(cwd) {
   for (const name of ['.framelabrc.json', '.framelabrc']) {
@@ -88,6 +89,10 @@ async function start(args) {
     t.ok('Using app URL ' + t.bold(appUrl));
   }
 
+  // Probe the app while the sync server boots — a tagged-but-inert app is the
+  // one failure that looks exactly like success, so it is worth the round trip.
+  const diagnosis = doctor.checkApp(appUrl, rootDir).catch(() => null);
+
   // Boot the server
   let createSyncServer;
   try {
@@ -111,6 +116,9 @@ async function start(args) {
     `http://localhost:${canvasPort}/?app=${encodeURIComponent(appUrl)}`;
   console.log('  ' + t.bold(t.hl(canvasUrl)));
   console.log();
+
+  doctor.report(await diagnosis, t);
+
   t.info('Ctrl+C to stop.');
 
   if (opts.open !== false) {

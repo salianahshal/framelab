@@ -253,6 +253,28 @@ don't have to retype flags.
 | [`@framelab/babel-plugin`](packages/babel-plugin) | Tags JSX elements with `data-framelab-id`; optionally injects the click runtime |
 | [`@framelab/canvas`](packages/canvas) | The browser canvas UI, served by the sync server |
 
+## When nothing is clickable
+
+Two separate things have to happen before the canvas can talk to your app: the
+Babel plugin has to tag your JSX with `data-framelab-id`, and it has to inject
+the click runtime into `pages/_app`. Either can fail alone, and both failures
+look the same from the outside — the app serves, the canvas connects, elements
+render, and nothing responds.
+
+So `framelab start` checks the app it's pointing at and says which half is
+missing:
+
+```
+! Elements are tagged, but the click runtime isn't in your app bundle.
+  The canvas will render your app and nothing will respond to a click.
+
+  NEXT_PUBLIC_FRAMELAB=true is not set in any .env file here.
+    echo 'NEXT_PUBLIC_FRAMELAB=true' >> .env.development
+```
+
+It's advisory — a setup that trips the heuristic gets a warning it can ignore,
+never a refusal to start — and it stays quiet when the app is wired correctly.
+
 ## Requirements & current limits
 
 - **Node.js >= 18**

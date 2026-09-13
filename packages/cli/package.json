@@ -33,6 +33,9 @@
   "engines": {
     "node": ">=18"
   },
+  "scripts": {
+    "test": "node test/doctor.js"
+  },
   "dependencies": {
     "@framelab/babel-plugin": "^0.2.0",
     "@framelab/server": "^0.2.0"
