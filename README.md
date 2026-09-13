@@ -287,9 +287,12 @@ never a refusal to start — and it stays quiet when the app is wired correctly.
   which Turbopack refuses to run alongside — on Next.js 16, where Turbopack is
   the default, you need `next dev --webpack` until the loader-based install
   lands.
-- **Pages Router is the supported path.** App Router
-  partly works — the babel plugin tags client components, but React Server
-  Components are skipped, so those elements aren't clickable.
+- **Pages Router is the supported path.** On App Router nothing is clickable,
+  but not for the reason you might expect: the plugin tags every file's JSX,
+  server components included. What is missing is the click runtime, which is
+  injected into `pages/_app` — a file App Router projects don't have. Until
+  that has another home, the canvas renders an App Router app and no element
+  responds.
 - Framelab configures Babel, which means Next falls back from SWC to Babel in
   development. Your production build is unaffected.
 - Editing an element inside a reused component edits its **definition**, so the
