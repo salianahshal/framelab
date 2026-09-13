@@ -205,7 +205,7 @@ browser UI, served locally.
 
 - **Node.js >= 18**
 - **Next.js + Tailwind CSS.** `framelab init` refuses to run on anything else.
-- **Pages Router is the supported path.** v0.1 targets Pages Router. App Router
+- **Pages Router is the supported path.** App Router
   partly works — the babel plugin tags client components, but React Server
   Components are skipped, so those elements aren't clickable.
 - Framelab configures Babel, which means Next falls back from SWC to Babel in

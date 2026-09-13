@@ -287,7 +287,7 @@ never a refusal to start — and it stays quiet when the app is wired correctly.
   which Turbopack refuses to run alongside — on Next.js 16, where Turbopack is
   the default, you need `next dev --webpack` until the loader-based install
   lands.
-- **Pages Router is the supported path.** v0.1 targets Pages Router. App Router
+- **Pages Router is the supported path.** App Router
   partly works — the babel plugin tags client components, but React Server
   Components are skipped, so those elements aren't clickable.
 - Framelab configures Babel, which means Next falls back from SWC to Babel in
