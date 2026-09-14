@@ -324,19 +324,45 @@ npm run test:live  --workspace @framelab/canvas  # plus a real Next.js dev serve
 npm run test:agent --workspace @framelab/canvas  # canvas click -> MCP process -> source edit
 ```
 
-`test:live` copies `examples/test-next-app` to a temp directory with its own
+`test:live` copies `examples/fixture-app` to a temp directory with its own
 dist dir, so it never collides with a dev server you already have running.
 
-[`examples/test-next-app`](examples/test-next-app) is a minimal Next.js 14 +
-Tailwind app used as the integration fixture. Its `tailwind.config.js` custom
-theme is asserted by the server's themeEngine tests — if you change the
-`brand`, `surface`, or `accent` tokens, the `card` radius, the `gutter`
-spacing, or the `card` shadow, update `packages/server/test/run.js` to match.
+### The fixture apps
 
-[`examples/test-next-app-v4`](examples/test-next-app-v4) is the same app on
-Tailwind v4: no `tailwind.config.js`, tokens in `@theme` blocks, and a page
-written half in tokens and half in hardcoded values so drift detection has
-something to find. `npm run dev` there serves on port 3135.
+[`examples/fixture-app`](examples/fixture-app) is what the integration suites
+drive, and the first thing to point Framelab at to see what it does. It is a
+real interface rather than a wireframe, and it contains the awkward cases on
+purpose: a component used three times (edit the definition, all three change),
+a template-literal `className`, a ternary `className` Framelab refuses to
+rewrite and shows as locked, responsive and hover variants, and a card styled
+with hardcoded values that tokens already cover so drift detection has
+something to find.
+
+Four things in it are a contract with `packages/canvas/test/live.js`, listed in
+a comment at the top of its `pages/index.tsx`. Change anything else freely.
+
+Its `tailwind.config.js` custom theme is asserted by the server's themeEngine
+tests — if you change the `brand`, `surface`, or `accent` tokens, the `card`
+radius, the `gutter` spacing, or the `card` shadow, update
+`packages/server/test/run.js` to match.
+
+[`examples/test-next-app-v4`](examples/test-next-app-v4) is the Tailwind v4
+counterpart: no `tailwind.config.js`, tokens in `@theme` blocks, and a page
+written half in tokens and half in hardcoded values. Nothing boots it in CI, so
+`packages/server/test/themeV4.js` asserts its stylesheet still parses — that is
+what stops it rotting. `npm run dev` there serves on port 3135.
+
+### The website
+
+[`site`](site) is framelab.dev. It is an ordinary Next.js app and not part of
+the npm workspace, so a root `npm install` doesn't touch it:
+
+```sh
+cd site && npm install && npm run dev   # port 3134
+```
+
+It is wired for Framelab itself, so you can edit the site with the tool it
+advertises.
 
 [`packages/server/test/fixtures/v4-app`](packages/server/test/fixtures/v4-app)
 is the Tailwind v4 counterpart: a shadcn-shaped `@theme inline` stylesheet over

@@ -12,7 +12,7 @@ const http = require('http');
 const { spawn, execFileSync } = require('child_process');
 
 const REPO = path.resolve(__dirname, '..', '..', '..');
-const EXAMPLE = path.join(REPO, 'examples/test-next-app');
+const EXAMPLE = path.join(REPO, 'examples/fixture-app');
 const { createSyncServer } = require(path.join(REPO, 'packages/server/src/syncServer'));
 const puppeteer = require(path.join(REPO, 'node_modules/puppeteer-core'));
 
@@ -42,7 +42,7 @@ function waitForServer(url, timeoutMs) {
 
 
 // Run with: npm run test:live --workspace @framelab/canvas
-// Boots a real Next.js dev server from examples/test-next-app in a temp copy,
+// Boots a real Next.js dev server from examples/fixture-app in a temp copy,
 // so it never collides with a dev server you already have running.
 async function main() {
   if (!CHROME) {
@@ -170,12 +170,18 @@ async function main() {
     const afterH1 = (after.match(/<h1 className="([^"]*)"/) || [])[1];
     console.log('  h1 after: ', afterH1);
     check('the colour edit reached the source', /text-ember/.test(afterH1 || ''), afterH1);
+    // Derived from the file rather than hardcoded: the claim is that the edit
+    // touched the colour and nothing else, which is true whatever the fixture
+    // headline happens to be styled with.
+    const classes = (s) => (s || '').split(/\s+/).filter(Boolean);
+    const others = (list) => list.filter((c) => !/^text-(white|ember)$/.test(c));
+    const beforeClasses = classes(beforeH1);
+    const afterClasses = classes(afterH1);
     check('every other class on the headline survived',
-      ['mt-6', 'text-[2.5rem]', 'font-medium', 'leading-[1.02]', 'tracking-[-0.03em]', 'sm:text-6xl', 'md:text-7xl']
-        .every((c) => (afterH1 || '').includes(c)),
-      afterH1);
+      others(afterClasses).join(' ') === others(beforeClasses).join(' '), afterH1);
     check('class order was preserved',
-      (afterH1 || '').startsWith('mt-6 text-[2.5rem] font-medium leading-[1.02] tracking-[-0.03em]'),
+      afterClasses.join(' ') ===
+        beforeClasses.map((c) => (c === 'text-white' ? 'text-ember' : c)).join(' '),
       afterH1);
 
     // Wait for HMR and confirm the browser actually repainted.

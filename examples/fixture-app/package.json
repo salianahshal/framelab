@@ -1,11 +1,11 @@
 {
-  "name": "test-next-app",
+  "name": "fixture-app",
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3134",
+    "dev": "next dev -p 3136",
     "build": "next build",
-    "start": "next start -p 3134"
+    "start": "next start -p 3136"
   },
   "dependencies": {
     "@babel/runtime": "^7.29.2",

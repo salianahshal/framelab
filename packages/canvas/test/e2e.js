@@ -135,7 +135,7 @@ async function main() {
   fs.mkdirSync(path.join(root, 'node_modules'), { recursive: true });
   try {
     fs.symlinkSync(
-      path.join(REPO, 'examples/test-next-app/node_modules/tailwindcss'),
+      path.join(REPO, 'examples/fixture-app/node_modules/tailwindcss'),
       path.join(root, 'node_modules/tailwindcss')
     );
   } catch {}

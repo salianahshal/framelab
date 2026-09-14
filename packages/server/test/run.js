@@ -446,7 +446,7 @@ function testFlattenColors() {
 }
 
 async function testLoadRealTheme() {
-  const projectDir = path.resolve(__dirname, '..', '..', '..', 'examples', 'test-next-app');
+  const projectDir = path.resolve(__dirname, '..', '..', '..', 'examples', 'fixture-app');
   const hasConfig = themeEngine.CONFIG_CANDIDATES.some((c) =>
     fs.existsSync(path.join(projectDir, c))
   );
