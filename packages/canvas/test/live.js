@@ -62,6 +62,13 @@ async function main() {
     "module.exports = { reactStrictMode: true, distDir: '.next-fl' };\n");
   fs.symlinkSync(path.join(EXAMPLE, 'node_modules'), path.join(root, 'node_modules'));
 
+  // Next writes next-env.d.ts and the dist dir on first boot. Without a
+  // .gitignore they land untracked, and framelab's diff panel counts their
+  // lines as changes — which quietly breaks the one-line-diff assertion on any
+  // machine where the fixture hasn't been built before (a fresh clone, CI).
+  fs.writeFileSync(path.join(root, '.gitignore'),
+    'node_modules\n.next\n.next-fl\nnext-env.d.ts\n*.tsbuildinfo\n');
+
   execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: root });
   execFileSync('git', ['config', 'user.email', 'e2e@framelab.local'], { cwd: root });
   execFileSync('git', ['config', 'user.name', 'E2E'], { cwd: root });
