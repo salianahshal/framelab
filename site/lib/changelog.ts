@@ -13,8 +13,8 @@ import path from 'path';
 export type Inline =
   | { type: 'text'; value: string }
   | { type: 'code'; value: string }
-  | { type: 'strong'; value: string }
-  | { type: 'link'; value: string; href: string };
+  | { type: 'strong'; content: Inline[] }
+  | { type: 'link'; content: Inline[]; href: string };
 
 export type Block =
   | { type: 'paragraph'; content: Inline[] }
@@ -23,17 +23,26 @@ export type Block =
 export type Section = { heading: string | null; blocks: Block[] };
 export type Release = { version: string; sections: Section[] };
 
-/** Split a line into text, `code`, **strong** and [links](href). */
+/**
+ * Split a line into text, `code`, **strong** and [links](href).
+ *
+ * Strong and link bodies are parsed recursively, because **bold with `code`
+ * inside** is ordinary markdown and rendering its backticks literally looks
+ * like a typo. Double-backtick spans come first: that is markdown's escape for
+ * code that itself contains a backtick, which this changelog uses for template
+ * literals.
+ */
 export function parseInline(text: string): Inline[] {
   const out: Inline[] = [];
-  const pattern = /`([^`]+)`|\*\*([^*]+)\*\*|\[([^\]]+)\]\(([^)]+)\)/g;
+  const pattern = /``(.+?)``|`([^`]+)`|\*\*(.+?)\*\*|\[([^\]]+)\]\(([^)]+)\)/g;
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = pattern.exec(text))) {
     if (m.index > last) out.push({ type: 'text', value: text.slice(last, m.index) });
-    if (m[1] !== undefined) out.push({ type: 'code', value: m[1] });
-    else if (m[2] !== undefined) out.push({ type: 'strong', value: m[2] });
-    else out.push({ type: 'link', value: m[3], href: m[4] });
+    if (m[1] !== undefined) out.push({ type: 'code', value: m[1].trim() });
+    else if (m[2] !== undefined) out.push({ type: 'code', value: m[2] });
+    else if (m[3] !== undefined) out.push({ type: 'strong', content: parseInline(m[3]) });
+    else out.push({ type: 'link', content: parseInline(m[4]), href: m[5] });
     last = m.index + m[0].length;
   }
   if (last < text.length) out.push({ type: 'text', value: text.slice(last) });

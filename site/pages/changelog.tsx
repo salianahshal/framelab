@@ -19,12 +19,16 @@ function Inlines({ content }: { content: Inline[] }) {
           );
         }
         if (node.type === 'strong') {
-          return <strong key={i} className="font-semibold text-white">{node.value}</strong>;
+          return (
+            <strong key={i} className="font-semibold text-white">
+              <Inlines content={node.content} />
+            </strong>
+          );
         }
         if (node.type === 'link') {
           return (
             <a key={i} href={node.href} className={`text-ember underline underline-offset-4 hover:text-ember-bright ${focusRing}`}>
-              {node.value}
+              <Inlines content={node.content} />
             </a>
           );
         }

@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev -p 3134",
     "build": "next build",
-    "start": "next start -p 3134"
+    "start": "next start -p 3134",
+    "test": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types test/changelog.test.ts"
   },
   "dependencies": {
     "@babel/runtime": "^7.29.2",

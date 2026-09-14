@@ -19,6 +19,16 @@ not `site/` in isolation, or `../CHANGELOG.md` won't resolve. On Vercel: set
 the project's Root Directory to `site` (Vercel still checks out the whole
 repo, so the parent path is present).
 
+## Tests
+
+```sh
+npm test
+```
+
+Covers `lib/changelog.ts` — the only real logic here. A parser mistake still
+renders a page, just with backticks showing through or a line quietly missing,
+so it is worth asserting rather than eyeballing.
+
 ## Editing the site with Framelab
 
 `babel.config.js` and `.env.development` are already wired, so:

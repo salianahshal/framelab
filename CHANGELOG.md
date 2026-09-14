@@ -66,14 +66,71 @@ the plugin, an unset `NEXT_PUBLIC_FRAMELAB`, or an App Router project with no
 
 ## 0.2.0
 
-- Duplicate an element with `⌘D`, copying it and its subtree in as the next
-  sibling.
-- Design-system drift detection: find hardcoded values a token already covers,
-  over MCP as `find_drift` and `fix_drift`.
+### Duplicating
+
+Select an element and press `⌘D`, or use the copy button in the inspector
+header. The element and everything inside it are copied in as the next sibling,
+indented to match, and the copy becomes the selection so the next edit lands on
+it. `⌘Z` removes it again.
+
+It is the quickest way to add a card to a grid or a row to a list: duplicate,
+then retype the text. Over MCP it is `duplicate_element`, which hands back the
+copy's id so an agent's next edit is unambiguous.
+
+### Design-system drift detection
+
+`bg-[#6e56cf]` and `bg-brand` render the same pixels. Only one of them moves
+when the token does.
+
+Every hardcoded value is compared against `tailwind.config` and reported when a
+token already covers it. Units are normalised, so `p-[16px]` matches a `4` that
+resolves to `1rem`, and a token you named yourself wins over a stock Tailwind
+step of the same value. Genuine one-offs are left alone.
+
+- This needed the theme reader to expose resolved token *values*, not just
+  their names — the question is the reverse of the usual one: not "what is
+  `gutter`?" but "is this `1.75rem` something I already have a name for?"
+- Over MCP, `find_drift` reports and `fix_drift` applies, so an agent can clean
+  a whole codebase in one pass.
+
+The MCP server went from thirteen tools to sixteen.
 
 ## 0.1.0
 
 Initial release. Click an element in your running Next.js + Tailwind app and
-restyle it, rewrite its text, reorder or delete it, with byte-surgical writes
-back to source. Order-preserving class engine, template-literal `className`
-support, an MCP server for AI editors, and a local-only sync server.
+restyle it, rewrite its text, reorder or delete it — with the change written
+back into your source file rather than into a stylesheet or a cloud sandbox.
+
+### Editing
+
+- **Order-preserving class engine.** Only the tokens you actually changed are
+  rewritten. Class order, unrecognised utilities, variants and comments all
+  survive, so `git diff` stays reviewable.
+- **Template-literal `className`s.** `` `p-4 ${ring}` `` is editable and the
+  `${…}` keeps its exact position. `cn()`, `clsx()`, `twMerge()` and `cva()`
+  are handled through their first string argument.
+- **Responsive and state styles are values, not strings.** Pick `md` or
+  `hover` in the inspector and edit that variant directly; base styles stay
+  put.
+- **Theme-aware.** Colours, spacing and radii come from your own
+  `tailwind.config`, so you edit in `brand` and `card`.
+- Reorder siblings, delete an element and its subtree, and undo or redo any of
+  it. Every write is re-parsed before it lands: a change that would break the
+  file is refused and the file left untouched.
+
+### For agents
+
+An MCP server with thirteen tools, so Claude Code, Cursor, Continue or Windsurf
+get the same token-aware editing the canvas uses. `get_selection` answers "what
+is the user pointing at?", and `update_styles` validates against your
+`tailwind.config` rather than emitting a class Tailwind silently drops.
+
+### Local only
+
+The sync server binds to loopback, refuses cross-origin requests, and rejects
+paths outside your project. No account, no upload, no sandbox — changes land as
+ordinary working-tree edits.
+
+### Fixed
+
+- The selection outline stayed glued to its element during scroll and resize.
