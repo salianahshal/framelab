@@ -1,13 +1,11 @@
 import Head from 'next/head';
 import { useState } from 'react';
+import SiteHeader from '../components/SiteHeader';
+import SiteFooter from '../components/SiteFooter';
+import NewTabHint from '../components/NewTabHint';
+import { focusRing, seam } from '../lib/ui';
 
 const INSTALL_COMMAND = 'npx framelab';
-
-const focusRing =
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-light focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
-
-/* Hairline seam colour, repeated often enough to be worth a constant. */
-const seam = 'border-offgray-900';
 
 function CursorIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -68,22 +66,6 @@ function Tick({ className = '' }: { className?: string }) {
   );
 }
 
-const isExternal = (href: string) => href.startsWith('http');
-
-/* Off-site links open in a new tab; rel guards against tabnabbing. */
-function externalProps(href: string) {
-  return isExternal(href)
-    ? { target: '_blank', rel: 'noopener noreferrer' }
-    : {};
-}
-
-/* Screen readers get no visual cue that a link leaves the page. */
-function NewTabHint({ href }: { href: string }) {
-  return isExternal(href) ? (
-    <span className="sr-only"> (opens in a new tab)</span>
-  ) : null;
-}
-
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
     <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-offgray-400">
@@ -138,12 +120,6 @@ const specs = [
   { label: 'License', value: 'MIT' },
 ];
 
-const navLinks = [
-  { label: 'Features', href: '#features' },
-  { label: 'Install', href: '#install' },
-  { label: 'GitHub', href: 'https://github.com/salianahshal/framelab' },
-];
-
 export default function Home() {
   const [copied, setCopied] = useState(false);
 
@@ -178,48 +154,7 @@ export default function Home() {
       <div className="min-h-dvh bg-surface text-offgray-50 antialiased">
         {/* Rails: the vertical hairlines that frame every section. */}
         <div className={`mx-auto max-w-6xl border-x ${seam}`}>
-          <header className={`border-b ${seam}`}>
-            <nav
-              aria-label="Main"
-              className="flex items-center justify-between px-5 py-3 sm:px-8"
-            >
-              <a href="/" className={`flex items-center gap-2.5 py-2 ${focusRing}`}>
-                <img
-                  src="/framelab-logo.svg"
-                  alt=""
-                  width={22}
-                  height={22}
-                  className="h-[22px] w-[22px]"
-                />
-                <span className="font-display text-[13px] font-semibold uppercase leading-none tracking-[0.2em] text-white">
-                  Framelab
-                </span>
-              </a>
-
-              <ul className="flex items-center">
-                {navLinks.map((link) => (
-                  <li key={link.label}>
-                    <a
-                      href={link.href}
-                      {...externalProps(link.href)}
-                      className={`flex min-h-[44px] items-center px-3 font-mono text-[12px] tracking-tight text-offgray-400 transition-colors duration-150 hover:text-white motion-reduce:transition-none ${focusRing}`}
-                    >
-                      {link.label}
-                      <NewTabHint href={link.href} />
-                    </a>
-                  </li>
-                ))}
-                <li className="ml-2 hidden sm:block">
-                  <a
-                    href="#install"
-                    className={`flex min-h-[36px] items-center rounded-[4px] bg-ember px-3.5 text-[13px] font-semibold text-black transition-colors duration-150 hover:bg-ember-bright motion-reduce:transition-none ${focusRing}`}
-                  >
-                    Get started
-                  </a>
-                </li>
-              </ul>
-            </nav>
-          </header>
+          <SiteHeader cta="#install" />
 
           <main id="main">
             {/* Hero */}
@@ -466,30 +401,7 @@ export default function Home() {
             </section>
           </main>
 
-          <footer className="px-5 py-10 sm:px-8">
-            <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
-              <p className="font-mono text-[11px] text-offgray-500">
-                Framelab — visual editor for Next.js + Tailwind
-              </p>
-              <ul className="flex items-center">
-                {[
-                  { label: 'GitHub', href: 'https://github.com/salianahshal/framelab' },
-                  { label: 'MIT', href: 'https://github.com/salianahshal/framelab/blob/main/LICENSE' },
-                ].map((link) => (
-                  <li key={link.label}>
-                    <a
-                      href={link.href}
-                      {...externalProps(link.href)}
-                      className={`flex min-h-[44px] items-center px-3 font-mono text-[11px] text-offgray-500 transition-colors duration-150 hover:text-offgray-100 motion-reduce:transition-none ${focusRing}`}
-                    >
-                      {link.label}
-                      <NewTabHint href={link.href} />
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </footer>
+          <SiteFooter />
         </div>
       </div>
     </>
