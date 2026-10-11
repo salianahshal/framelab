@@ -4,7 +4,7 @@ All notable changes to Framelab. Versions are released together across the four
 packages, so one entry covers `framelab`, `@framelab/server`,
 `@framelab/babel-plugin` and `@framelab/canvas`.
 
-## Unreleased
+## 0.3.0
 
 ### App Router
 
@@ -35,8 +35,6 @@ wrappers in any order, and it is inert outside development.
   in a `node_modules_<hash>` chunk — it was preferring chunks whose names
   contain "client", which on Next.js 16 matches several framework chunks and
   not the one that matters. It now checks every script, in parallel.
-
-## 0.3.0
 
 ### Tailwind v4
 
@@ -84,19 +82,23 @@ the plugin, an unset `NEXT_PUBLIC_FRAMELAB`, or an App Router project with no
 
 ### Docs
 
-- Corrected why App Router elements aren't clickable. Server components are
-  not skipped by the plugin — every file's JSX is tagged. What's missing is a
-  `pages/_app` for the click runtime.
-- Noted that Turbopack works. Next.js 16 configures `babel-loader`
-  automatically when it finds a Babel config, running Babel alongside SWC
-  rather than instead of it, so `framelab init` does not cost you Turbopack.
-  Verified on 16.4.0, including that server-component JSX is tagged and the
-  tags reach the streamed HTML.
+- Turbopack works, and an earlier draft of these notes said it didn't. Next.js
+  16 configures `babel-loader` automatically when it finds a Babel config and
+  runs Babel alongside SWC rather than instead of it, so `framelab init` does
+  not cost you Turbopack. The claim that it did described Next.js 15.
+- Element ids are derived from each node's own position in the file, so the
+  two transform passes the App Router performs over a shared module agree. A
+  per-file counter would not have, and the canvas would have selected the
+  wrong element after hydration.
 
 ### Internal
 
 - `examples/test-next-app-v4` is a Tailwind v4 fixture app, and the CLI package
   has a test suite for the first time.
+- A browser suite now drives the canvas against a Tailwind v4 project
+  (`npm run test:v4 --workspace @framelab/canvas`). Everything about v4 was
+  covered at the unit level; nothing proved the resolved tokens reached the
+  inspector.
 
 ## 0.2.0
 

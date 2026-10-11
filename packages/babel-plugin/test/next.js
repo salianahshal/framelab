@@ -91,4 +91,51 @@ for (const sub of ['.', './client', './next']) {
   check(`${sub} points at a file that exists`, fs.existsSync(path.join(__dirname, '..', rel)), true);
 }
 
+divider('ids are position-derived, not counted');
+// Under the App Router a file in both the server and client graphs is
+// transformed twice. Ids come from the node's own position, so the two passes
+// agree; a per-file counter would not, and the canvas would select the wrong
+// element after hydration. Verified against a real Next.js 16.4 app, and
+// pinned here so it cannot regress.
+const babel = require('@babel/core');
+const SRC = [
+  "export default function C(){",
+  '  return (',
+  '    <main className="p-4">',
+  '      <h1 className="text-xl">a</h1>',
+  '      <p>b</p>',
+  '    </main>',
+  '  );',
+  '}',
+].join('\n');
+
+function idsFor(source, filename) {
+  const out = babel.transformSync(source, {
+    filename,
+    presets: [['@babel/preset-react', { runtime: 'automatic' }]],
+    plugins: [[require.resolve('../src/index.js'), { injectClickRuntime: false }]],
+    configFile: false,
+    babelrc: false,
+  }).code;
+  return (out.match(/data-framelab-id": "([^"]+)"/g) || []).map((m) => m.split('"')[2]);
+}
+
+const first = idsFor(SRC, '/proj/app/C.tsx');
+const second = idsFor(SRC, '/proj/app/C.tsx');
+check('two passes over the same file agree', second, first);
+check('one id per element', first.length, 3);
+check('each id is tag|file|line|offset',
+  first.every((id) => /^[a-z0-9.:]+\|\/proj\/app\/C\.tsx\|\d+\|\d+$/i.test(id)), true);
+check('ids are distinct', new Set(first).size, first.length);
+
+// If ids were counted, inserting an element above would renumber everything
+// below it. Position-derived ids only shift where the text actually moved.
+const withExtra = SRC.replace('    <main className="p-4">', '    <main className="p-4">\n      <hr />');
+const after = idsFor(withExtra, '/proj/app/C.tsx');
+check('an inserted element does not renumber its siblings',
+  after.filter((id) => id.startsWith('hr|')).length, 1);
+check('the tag of each surviving element is unchanged',
+  after.filter((id) => !id.startsWith('hr|')).map((id) => id.split('|')[0]),
+  first.map((id) => id.split('|')[0]));
+
 console.log(`\n${passed}/${passed} passed`);

@@ -4,11 +4,12 @@
 
 # framelab
 
-**Visual editor for Next.js + Tailwind. Runs on your machine, edits your files.**
+**Edit your running Next.js app by clicking it. The change lands in your source
+as your own design tokens — and you see the diff before you keep it.**
 
-Click any element in your running app. Restyle it, rewrite its text, delete it,
-or hand it to your coding agent — Framelab writes the change back into your
-source file, touching only the tokens you actually changed.
+Click any element, restyle it, rewrite its text, delete it, or hand it to your
+coding agent. Framelab writes to the real file and touches nothing you didn't
+change. No cloud, no sandbox, no export step.
 
 [![npm](https://img.shields.io/npm/v/framelab?color=e0490d&label=npm)](https://www.npmjs.com/package/framelab)
 [![node](https://img.shields.io/node/v/framelab?color=e0490d)](https://nodejs.org)

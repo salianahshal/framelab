@@ -84,14 +84,14 @@ const features = [
   {
     icon: SlidersIcon,
     n: '02',
-    title: 'Edit against your theme',
-    body: 'Colors, spacing, and layout are driven by the tokens already in your tailwind.config. No memorizing class names.',
+    title: 'It writes your tokens',
+    body: 'Bump spacing and it emits p-gutter, not padding: 28px. Your tokens are read from tailwind.config or your @theme blocks, resolved through var() and calc().',
   },
   {
     icon: DiffIcon,
     n: '03',
-    title: 'Byte-clean diffs',
-    body: 'AST-level writes touch only the classes you changed. Review the hunk, revert it, or commit it like any other edit.',
+    title: 'See it before you keep it',
+    body: 'Changes land as ordinary working-tree edits, listed in a diff panel. Revert a hunk, undo byte-for-byte, or commit. Nothing is applied behind your back.',
   },
 ];
 
@@ -186,9 +186,10 @@ export default function Home() {
                 </h1>
 
                 <p className="mt-7 max-w-xl text-[17px] leading-relaxed text-offgray-300">
-                  Framelab runs next to your dev server. Click any element on the
-                  canvas, adjust its Tailwind classes, and the change is written
-                  straight back into your source file — no cloud, no sandbox, no
+                  Framelab runs next to your dev server. Click any element,
+                  adjust it, and the change is written straight back into your
+                  source file as your own design tokens — with a diff you
+                  review before you keep it. No cloud, no sandbox, no
                   copy-paste step.
                 </p>
 

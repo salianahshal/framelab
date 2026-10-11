@@ -4,11 +4,12 @@
 
 # Framelab
 
-**Visual editor for Next.js + Tailwind. Runs on your machine, edits your files.**
+**Edit your running Next.js app by clicking it. The change lands in your source
+as your own design tokens — and you see the diff before you keep it.**
 
-Click any element in your running app. Restyle it, rewrite its text, delete it,
-or hand it to your coding agent — Framelab writes the change back into your
-source file, touching only the tokens you actually changed.
+Click any element, restyle it, rewrite its text, delete it, or hand it to your
+coding agent. Framelab writes to the real file and touches nothing you didn't
+change. No cloud, no sandbox, no export step.
 
 [![npm](https://img.shields.io/npm/v/framelab?color=e0490d&label=npm)](https://www.npmjs.com/package/framelab)
 [![node](https://img.shields.io/node/v/framelab?color=e0490d)](https://nodejs.org)
@@ -20,27 +21,36 @@ source file, touching only the tokens you actually changed.
 
 ## Why Framelab
 
-Visual editors usually make you choose: either they own your code (upload it to
-a cloud sandbox, export it back later), or they write CSS you didn't ask for.
-Framelab does neither.
+Nudging a value in dev tools is easy. Getting that nudge into the codebase as
+`p-gutter` instead of `padding: 28px` is the part that goes wrong — whether a
+person does it by hand or an agent does it for you.
 
-- **Local only.** No account, no upload, no sandbox. The CLI talks to your dev
-  server on localhost and edits files in place. The sync server binds to
+Framelab is the last mile. It edits the real file, in your own vocabulary, and
+shows you the diff before you keep it.
+
+- **You see the change before you keep it.** Every edit lands as an ordinary
+  working-tree change, listed in a diff panel in the canvas. Revert a hunk,
+  revert a file, undo byte-for-byte, or commit — nothing is applied behind
+  your back and nothing needs publishing.
+- **It writes your tokens, not the pixel value you landed on.** Bump spacing
+  and it emits `p-gutter`, because it reads your design system — your
+  `tailwind.config` on Tailwind v3, your `@theme` blocks on v4, resolved
+  through `var()` and `calc()` and out of oklch. It will also tell you where
+  you already have a hardcoded value a token covers, and fix it.
+- **Nothing else in the file moves.** Only the values you changed are
+  rewritten. Class order, unrecognised utilities, variants, comments and
+  import order survive, so the diff is small enough to actually read.
+- **It refuses rather than guesses.** A `className` built from a ternary is
+  marked locked, with the reason, instead of being rewritten into something
+  that happens to parse. Every write is re-parsed first; a change that would
+  break the file is not made.
+- **No model in the loop unless you want one.** Clicking a swatch is a
+  deterministic edit, not a prompt. When you do want an agent, it gets the
+  same validated path over MCP — it proposes `{prop, value}` and Framelab
+  renders the class after checking it against your design system, so it
+  cannot invent `bg-embr` or reorder your classes.
+- **Local only.** No account, no upload, no sandbox. The sync server binds to
   loopback and refuses cross-origin requests and paths outside your project.
-- **Byte-surgical diffs.** Only the tokens you actually changed are rewritten.
-  Class order, unrecognised utilities, variants, comments and import order all
-  survive untouched — `git diff` stays reviewable.
-- **Theme-aware, on Tailwind v3 and v4.** Colors, spacing, and radii come from
-  your own design system — `tailwind.config.{js,ts}` on v3, or the `@theme`
-  blocks in your CSS on v4 — so you edit in `brand` and `card`, not `#6e56cf`
-  and `14px`.
-- **Responsive and state styles are values, not strings.** Pick `md` or `hover`
-  in the inspector and edit that variant directly; the base styles stay put.
-- **Built to work with an agent.** Your AI editor can ask Framelab what you're
-  pointing at, and its edits are checked against your own design system before
-  they're written.
-- **Your git workflow, unchanged.** Changes land as ordinary working-tree edits.
-  Review them, revert a hunk, or commit them like anything else.
 
 ## Quick start
 
@@ -328,6 +338,7 @@ Two browser-level suites run separately (they need Chrome, or `CHROME_PATH`):
 
 ```sh
 npm run test:e2e   --workspace @framelab/canvas  # canvas against a real sync server
+npm run test:v4    --workspace @framelab/canvas  # the same, on a Tailwind v4 project
 npm run test:live  --workspace @framelab/canvas  # plus a real Next.js dev server
 npm run test:agent --workspace @framelab/canvas  # canvas click -> MCP process -> source edit
 ```
