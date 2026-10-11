@@ -49,8 +49,8 @@ Framelab attaches to a dev server you're already running.
 ```sh
 cd your-next-app
 
-npx framelab init          # detect the project, write babel.config.js + .env wiring
-npm install --save-dev @framelab/babel-plugin '@babel/runtime@^7'
+npx framelab init          # detect the project, write the config + .env wiring
+npm install --save-dev @framelab/babel-plugin
 
 npm run dev                # terminal 1 — your app
 npx framelab               # terminal 2 — the canvas
@@ -291,13 +291,16 @@ never a refusal to start — and it stays quiet when the app is wired correctly.
   does reaches your production bundle; the Babel pass itself still runs during
   a production build, which costs build time you can avoid by scoping the
   config to dev.
-- **Pages Router is the supported path, but App Router is closer than it
-  sounds.** The plugin tags every file's JSX — server components included —
-  and those tags survive into the streamed HTML; verified on Next.js 16.4 with
-  React 19 and an RSC page. What's missing is only the click runtime, which is
-  injected into `pages/_app`, a file App Router projects don't have. So the
-  canvas renders an App Router app and nothing responds to a click. `framelab
-  start` detects exactly this case and says so.
+- **App Router works on Next.js 16.3+.** The runtime reaches the browser
+  through `instrumentationClientInject`, which `framelab init` wires up by
+  wrapping your `next.config`. Server components are editable too: the plugin
+  tags their JSX, the tags survive into the streamed HTML, and an edit to a
+  server component round-trips through HMR. Verified on Next.js 16.4 with
+  React 19 and Turbopack.
+- **Below Next.js 16.3, the App Router can't be supported.** The runtime has
+  to be inlined into `pages/_app`, which those projects don't have, so
+  elements are tagged but nothing responds to a click. `framelab start` says
+  so rather than leaving you guessing.
 - Framelab configures Babel, which means Next falls back from SWC to Babel in
   development. Your production build is unaffected.
 - Editing an element inside a reused component edits its **definition**, so the

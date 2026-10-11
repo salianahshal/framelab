@@ -20,6 +20,40 @@ function detectFramework(rootDir) {
   return { framework: null, version: null };
 }
 
+// Resolve the installed Next.js version when we can, since package.json may
+// hold a range ("^16") rather than a version. Falls back to parsing the range.
+function detectNextVersion(rootDir) {
+  try {
+    const pkgPath = require('module')
+      .createRequire(path.resolve(rootDir, 'package.json'))
+      .resolve('next/package.json');
+    const v = JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version;
+    const m = String(v).match(/^(\d+)\.(\d+)/);
+    if (m) return { major: Number(m[1]), minor: Number(m[2]), version: v, installed: true };
+  } catch {}
+  const pkg = readPkg(rootDir);
+  const all = pkg ? { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) } : {};
+  const m = String(all.next || '').match(/(\d+)(?:\.(\d+))?/);
+  if (!m) return null;
+  return {
+    major: Number(m[1]),
+    minor: m[2] ? Number(m[2]) : 0,
+    version: all.next,
+    installed: false,
+  };
+}
+
+/**
+ * Next.js 16.3 added `instrumentationClientInject`, which is how the click
+ * runtime reaches the browser without a `pages/_app` — the only way to support
+ * the App Router.
+ */
+function supportsClientInject(rootDir) {
+  const v = detectNextVersion(rootDir);
+  if (!v) return false;
+  return v.major > 16 || (v.major === 16 && v.minor >= 3);
+}
+
 function detectRouter(rootDir) {
   const pages = fs.existsSync(path.join(rootDir, 'pages')) ||
                 fs.existsSync(path.join(rootDir, 'src/pages'));
@@ -95,6 +129,8 @@ module.exports = {
   readPkg,
   detectFramework,
   detectRouter,
+  detectNextVersion,
+  supportsClientInject,
   detectAppPort,
   checkUrl,
   findRunningDevServer,

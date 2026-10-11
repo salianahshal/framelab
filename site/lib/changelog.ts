@@ -18,7 +18,8 @@ export type Inline =
 
 export type Block =
   | { type: 'paragraph'; content: Inline[] }
-  | { type: 'list'; items: Inline[][] };
+  | { type: 'list'; items: Inline[][] }
+  | { type: 'code'; lang: string | null; value: string };
 
 export type Section = { heading: string | null; blocks: Block[] };
 export type Release = { version: string; sections: Section[] };
@@ -70,8 +71,38 @@ function parseBlocks(lines: string[]): Block[] {
     items = null;
   };
 
+  // Fenced code blocks are taken verbatim — no inline parsing inside them,
+  // or a snippet containing a backtick or an asterisk would be mangled.
+  let fence: { lang: string | null; body: string[] } | null = null;
+  const flushFence = () => {
+    if (!fence) return;
+    // Trailing blank lines are an artefact of where the fence sits in the
+    // file, not part of the snippet; they would render as empty <pre> rows.
+    const body = [...fence.body];
+    while (body.length && !body[body.length - 1].trim()) body.pop();
+    blocks.push({ type: 'code', lang: fence.lang, value: body.join('\n') });
+    fence = null;
+  };
+
   for (const raw of lines) {
     const line = raw.trimEnd();
+
+    const fenceMark = line.match(/^\s*```+\s*([A-Za-z0-9_+-]*)\s*$/);
+    if (fence) {
+      if (fenceMark) {
+        flushFence();
+      } else {
+        fence.body.push(raw);
+      }
+      continue;
+    }
+    if (fenceMark) {
+      flushParagraph();
+      flushList();
+      fence = { lang: fenceMark[1] || null, body: [] };
+      continue;
+    }
+
     if (!line.trim()) {
       flushParagraph();
       flushList();
@@ -96,6 +127,7 @@ function parseBlocks(lines: string[]): Block[] {
   }
   flushParagraph();
   flushList();
+  flushFence();
   return blocks;
 }
 

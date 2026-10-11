@@ -12,6 +12,12 @@
   "homepage": "https://github.com/salianahshal/framelab#readme",
   "bugs": "https://github.com/salianahshal/framelab/issues",
   "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./src/client.js",
+    "./next": "./src/next.js",
+    "./package.json": "./package.json"
+  },
   "files": [
     "src"
   ],
@@ -19,7 +25,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node test/run.js",
+    "test": "node test/run.js && node test/next.js",
     "prepublishOnly": "npm test"
   },
   "peerDependencies": {

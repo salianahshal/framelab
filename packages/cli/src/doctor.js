@@ -23,7 +23,11 @@ const RUNTIME_SENTINEL = '__framelab_click_installed';
 const TAG_ATTR = 'data-framelab-id';
 
 const BODY_LIMIT = 4 * 1024 * 1024;
-const SCRIPT_LIMIT = 8;
+const SCRIPT_LIMIT = 24;
+
+// Framework chunks the runtime is never in. Checked last rather than dropped,
+// since a bundler is free to put anything anywhere.
+const FRAMEWORK_CHUNK = /next[_-]dist|react-dom|react-server|turbopack|polyfill|hmr-client|devtools/i;
 
 function fetchText(url, timeoutMs = 2500) {
   return new Promise((resolve) => {
@@ -60,11 +64,13 @@ function scriptUrls(html, appUrl) {
   while ((m = re.exec(html))) {
     try { out.push(new URL(m[1], appUrl).href); } catch { /* skip */ }
   }
-  // The runtime rides in the entry chunk, so look there first and only widen if
-  // the app doesn't use a recognisable name.
-  const entryish = out.filter((u) => /_app|main|index|client|entry/i.test(u));
-  const rest = out.filter((u) => !entryish.includes(u));
-  return [...entryish, ...rest].slice(0, SCRIPT_LIMIT);
+  // Order by how likely the runtime is to be there, but check everything —
+  // guessing the entry chunk by name is not reliable. Turbopack emits
+  // `node_modules_<hash>._.js`, which looks like nothing in particular, while
+  // several framework chunks are literally named `..._client_...`.
+  const framework = out.filter((u) => FRAMEWORK_CHUNK.test(u));
+  const likely = out.filter((u) => !framework.includes(u));
+  return [...likely, ...framework].slice(0, SCRIPT_LIMIT);
 }
 
 /** Does the served app have tags, and did the click runtime make it into a chunk? */
@@ -77,13 +83,11 @@ async function probeApp(appUrl) {
     return { reachable: true, tagged, runtime: true };
   }
 
-  for (const url of scriptUrls(html, appUrl)) {
-    const body = await fetchText(url);
-    if (body && body.includes(RUNTIME_SENTINEL)) {
-      return { reachable: true, tagged, runtime: true };
-    }
-  }
-  return { reachable: true, tagged, runtime: false };
+  // Fetched together: a modern dev build serves a dozen or more chunks, and
+  // doing this in series would add noticeable latency to every `framelab start`.
+  const bodies = await Promise.all(scriptUrls(html, appUrl).map((u) => fetchText(u)));
+  const runtime = bodies.some((b) => b && b.includes(RUNTIME_SENTINEL));
+  return { reachable: true, tagged, runtime };
 }
 
 function readIfExists(file) {
@@ -167,8 +171,8 @@ function diagnose(probe, project) {
   }
   if (!project.hasEntry) {
     fixes.push(project.appRouter
-      ? ['This looks like an App Router project, and the runtime is injected into pages/_app.',
-        'App Router support is still partial — see the README']
+      ? ['App Router has no pages/_app, so the runtime is injected through next.config instead.',
+        "wrap your config: withFramelab(yourConfig) from '@framelab/babel-plugin/next' (needs Next.js 16.3+)"]
       : ['No pages/_app file found to inject the runtime into.',
         'create pages/_app.tsx, or pass entryPatterns to the plugin']);
   }

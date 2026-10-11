@@ -11,3 +11,7 @@ node_modules/
 
 # TypeScript incremental build state
 *.tsbuildinfo
+
+# Deep-research artefacts: decision notes, not part of the build
+research_notes/
+reports/

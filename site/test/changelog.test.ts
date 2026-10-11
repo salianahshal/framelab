@@ -91,9 +91,38 @@ check('the continuation line is joined',
 check('a release with no ### still keeps its prose',
   releases[1].sections[0].heading, null);
 
+divider('fenced code blocks');
+// Verbatim: a snippet containing backticks or asterisks must not be parsed as
+// inline markup. This is how the changelog shows config examples.
+const fenced = parseChangelog([
+  '## 1.0.0',
+  '',
+  'Before.',
+  '',
+  '```js',
+  "const x = `a ${b}` // ** not bold **",
+  '```',
+  '',
+  'After.',
+].join('\n'));
+const fb = fenced[0].sections[0].blocks;
+check('three blocks around the fence', fb.map((b) => b.type), ['paragraph', 'code', 'paragraph']);
+check('the language is kept', fb[1].type === 'code' ? fb[1].lang : null, 'js');
+check('the body is verbatim', fb[1].type === 'code' ? fb[1].value : null,
+  "const x = `a ${b}` // ** not bold **");
+
+const unterminated = parseChangelog('## 1.0.0\n\n```\nstranded\n');
+check('an unterminated fence still renders',
+  unterminated[0].sections[0].blocks.some((b) => b.type === 'code' && b.value === 'stranded'), true);
+
 divider('the real CHANGELOG.md');
 const real = readChangelog();
-check('every release has a version', real.every((r) => /^\d+\.\d+\.\d+$/.test(r.version)), true);
+// A heading is either a released version or the Unreleased section that
+// accumulates until the next one is cut.
+check('every heading is a version or Unreleased',
+  real.every((r) => /^\d+\.\d+\.\d+$/.test(r.version) || r.version === 'Unreleased'), true);
+check('at most one Unreleased section',
+  real.filter((r) => r.version === 'Unreleased').length <= 1, true);
 check('no release is empty', real.every((r) => r.sections.some((s) => s.blocks.length)), true);
 // A stray backtick reaching the page means a code span did not close.
 const text = JSON.stringify(real.map((r) => r.sections));

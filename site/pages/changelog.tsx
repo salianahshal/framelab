@@ -42,7 +42,14 @@ function Blocks({ blocks }: { blocks: Block[] }) {
   return (
     <>
       {blocks.map((block, i) =>
-        block.type === 'list' ? (
+        block.type === 'code' ? (
+          <pre
+            key={i}
+            className="mt-4 overflow-x-auto rounded-[6px] border border-offgray-900 bg-surface-1 px-4 py-3"
+          >
+            <code className="font-mono text-[13px] leading-relaxed text-cream-100">{block.value}</code>
+          </pre>
+        ) : block.type === 'list' ? (
           <ul key={i} className="mt-4 space-y-2.5">
             {block.items.map((item, j) => (
               <li key={j} className="relative pl-5 text-[15px] leading-relaxed text-offgray-300">

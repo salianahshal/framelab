@@ -3,7 +3,13 @@
 const fs = require('fs');
 const path = require('path');
 const t = require('./term');
-const { detectFramework, detectRouter } = require('./detect');
+const { detectFramework, detectRouter, detectNextVersion, supportsClientInject } = require('./detect');
+
+const NEXT_CONFIG = `const { withFramelab } = require('@framelab/babel-plugin/next');
+
+/** @type {import('next').NextConfig} */
+module.exports = withFramelab({});
+`;
 
 const BABEL_CONFIG = `module.exports = {
   presets: ['next/babel'],
@@ -31,13 +37,23 @@ async function init(args) {
   t.ok(`Detected ${t.bold('Next.js ' + fw.version.replace(/^[^\d]+/, ''))}`);
 
   const router = detectRouter(cwd);
+  const nextVersion = detectNextVersion(cwd);
+  const canInject = supportsClientInject(cwd);
+
   if (router === 'pages') {
     t.ok('Pages Router detected');
   } else if (router === 'app') {
-    t.warn('App Router detected — Framelab v0.1 is built for Pages Router.');
-    t.info('Pages Router (next dev with babel) is fully supported.');
-    t.info('App Router with React Server Components has caveats; the babel');
-    t.info('plugin will tag client components but server components are skipped.');
+    if (canInject) {
+      t.ok('App Router detected');
+      t.info('The runtime will be injected via instrumentationClientInject,');
+      t.info('so server components are clickable too.');
+    } else {
+      t.warn('App Router detected, but Next.js ' + (nextVersion ? nextVersion.version : '?') +
+        ' cannot inject the runtime.');
+      t.info('App Router support needs Next.js 16.3+, which added');
+      t.info('instrumentationClientInject. Elements will be tagged but nothing');
+      t.info('will respond to a click until you upgrade.');
+    }
   } else {
     t.warn('Could not find pages/ or app/ directory.');
   }
@@ -63,7 +79,30 @@ async function init(args) {
     t.ok('Wrote babel.config.js');
   }
 
-  // 2. .env.development
+  // 2. next.config — how the runtime reaches the browser on Next.js 16.3+.
+  //    On older versions the babel plugin inlines it into pages/_app instead.
+  if (canInject) {
+    const configNames = ['next.config.js', 'next.config.mjs', 'next.config.ts', 'next.config.cjs'];
+    const existing = configNames.find((n) => fs.existsSync(path.join(cwd, n)));
+    if (!existing) {
+      fs.writeFileSync(path.join(cwd, 'next.config.js'), NEXT_CONFIG);
+      t.ok('Wrote next.config.js');
+    } else {
+      const body = fs.readFileSync(path.join(cwd, existing), 'utf8');
+      if (body.includes('withFramelab')) {
+        t.ok(`${existing} already wraps your config with withFramelab`);
+      } else {
+        t.warn(`${existing} exists — leaving it alone.`);
+        t.info('Wrap your exported config so the runtime reaches the browser:');
+        console.log();
+        console.log('    ' + t.hl("const { withFramelab } = require('@framelab/babel-plugin/next');"));
+        console.log('    ' + t.hl('module.exports = withFramelab(yourConfig);'));
+        console.log();
+      }
+    }
+  }
+
+  // 3. .env.development
   const envPath = path.join(cwd, '.env.development');
   let envBody = '';
   if (fs.existsSync(envPath)) envBody = fs.readFileSync(envPath, 'utf8');
@@ -75,12 +114,12 @@ async function init(args) {
     t.ok('Added NEXT_PUBLIC_FRAMELAB=true to .env.development');
   }
 
-  // 3. Warn about an incompatible @babel/runtime
+  // 4. Warn about an incompatible @babel/runtime
   // Next.js 14's Babel path imports `@babel/runtime/regenerator`, a subpath
   // that 8.x removed. Installing it unpinned breaks the dev server with an
   // ERR_PACKAGE_PATH_NOT_EXPORTED that points nowhere near the real cause.
   const runtimePkg = path.join(cwd, 'node_modules', '@babel', 'runtime', 'package.json');
-  if (fs.existsSync(runtimePkg)) {
+  if ((!nextVersion || nextVersion.major < 16) && fs.existsSync(runtimePkg)) {
     try {
       const version = JSON.parse(fs.readFileSync(runtimePkg, 'utf8')).version || '';
       const major = Number(version.split('.')[0]);
@@ -95,13 +134,19 @@ async function init(args) {
     } catch {}
   }
 
-  // 4. Print next steps
+  // 5. Print next steps
   console.log();
   console.log(t.bold('Next steps:'));
   console.log();
+  // Next.js 14's Babel path imports @babel/runtime/regenerator; 16 does not.
+  const needsBabelRuntime = !nextVersion || nextVersion.major < 16;
   console.log('  ' + t.dim('1. Install the runtime dependencies:'));
-  console.log('     ' + t.hl("npm install --save-dev @framelab/babel-plugin '@babel/runtime@^7'"));
-  console.log('     ' + t.dim('(Next.js 14 needs @babel/runtime 7.x; 8.x dropped a subpath it imports)'));
+  if (needsBabelRuntime) {
+    console.log('     ' + t.hl("npm install --save-dev @framelab/babel-plugin '@babel/runtime@^7'"));
+    console.log('     ' + t.dim('(Next.js 14 needs @babel/runtime 7.x; 8.x dropped a subpath it imports)'));
+  } else {
+    console.log('     ' + t.hl('npm install --save-dev @framelab/babel-plugin'));
+  }
   console.log();
   console.log('  ' + t.dim('2. Start your dev server (in one terminal):'));
   console.log('     ' + t.hl('npm run dev'));

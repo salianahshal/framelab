@@ -4,6 +4,38 @@ All notable changes to Framelab. Versions are released together across the four
 packages, so one entry covers `framelab`, `@framelab/server`,
 `@framelab/babel-plugin` and `@framelab/canvas`.
 
+## Unreleased
+
+### App Router
+
+Framelab works on the App Router, on Next.js 16.3 and later. Server components
+are editable too — the plugin already tagged their JSX, and the tags reach the
+streamed HTML; what was missing was only a way to get the click runtime into
+the browser, since the runtime was inlined into `pages/_app` and App Router
+projects have no such file.
+
+Next.js 16.3 added `instrumentationClientInject`, a list of modules imported
+on the client before hydration, which its docs describe as intended for
+`next.config.js` plugins. `framelab init` now wraps your config:
+
+```js
+const { withFramelab } = require('@framelab/babel-plugin/next');
+module.exports = withFramelab({});
+```
+
+The wrapper appends rather than replaces, so it composes with other config
+wrappers in any order, and it is inert outside development.
+
+- The runtime is now a real module (`@framelab/babel-plugin/client`) rather
+  than only a string. The Babel path reads that same file back off disk, so
+  the two delivery paths cannot drift apart.
+- `init` no longer tells you to install `@babel/runtime` on Next.js 16, which
+  does not need it.
+- The startup diagnostic no longer missed a runtime that Turbopack had placed
+  in a `node_modules_<hash>` chunk — it was preferring chunks whose names
+  contain "client", which on Next.js 16 matches several framework chunks and
+  not the one that matters. It now checks every script, in parallel.
+
 ## 0.3.0
 
 ### Tailwind v4
