@@ -205,12 +205,15 @@ browser UI, served locally.
 
 - **Node.js >= 18**
 - **Next.js + Tailwind CSS.** `framelab init` refuses to run on anything else.
-- **Pages Router is the supported path.** On App Router nothing is clickable,
-  but not for the reason you might expect: the plugin tags every file's JSX,
-  server components included. What is missing is the click runtime, which is
-  injected into `pages/_app` — a file App Router projects don't have. Until
-  that has another home, the canvas renders an App Router app and no element
-  responds.
+- **Pages Router is the supported path, but App Router is closer than it
+  sounds.** The plugin tags every file's JSX — server components included —
+  and those tags survive into the streamed HTML; verified on Next.js 16.4 with
+  React 19. What's missing is only the click runtime, which is injected into
+  `pages/_app`, a file App Router projects don't have. `framelab start`
+  detects exactly this case and says so.
+- **Turbopack is fine.** Next.js 16 configures `babel-loader` automatically
+  when it finds a Babel config, so `framelab init` does not take Turbopack
+  away from you.
 - Framelab configures Babel, which means Next falls back from SWC to Babel in
   development. Your production build is unaffected.
 - Editing an element inside a reused component edits its **definition**, so the

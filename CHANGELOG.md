@@ -55,9 +55,11 @@ the plugin, an unset `NEXT_PUBLIC_FRAMELAB`, or an App Router project with no
 - Corrected why App Router elements aren't clickable. Server components are
   not skipped by the plugin — every file's JSX is tagged. What's missing is a
   `pages/_app` for the click runtime.
-- Documented that Turbopack is unsupported: `framelab init` writes
-  `babel.config.js`, which Turbopack refuses to run alongside. On Next.js 16,
-  where Turbopack is the default, `next dev --webpack` is needed.
+- Noted that Turbopack works. Next.js 16 configures `babel-loader`
+  automatically when it finds a Babel config, running Babel alongside SWC
+  rather than instead of it, so `framelab init` does not cost you Turbopack.
+  Verified on 16.4.0, including that server-component JSX is tagged and the
+  tags reach the streamed HTML.
 
 ### Internal
 

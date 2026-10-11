@@ -283,16 +283,21 @@ never a refusal to start — and it stays quiet when the app is wired correctly.
   `@theme` blocks (including `@theme inline` over `:root`, as shadcn/ui
   generates) on v4. On v4 the tokens are resolved through `var()` and `calc()`
   and oklch is converted, so drift detection and the inspector see real values.
-- **Turbopack is not supported yet.** `framelab init` writes `babel.config.js`,
-  which Turbopack refuses to run alongside — on Next.js 16, where Turbopack is
-  the default, you need `next dev --webpack` until the loader-based install
-  lands.
-- **Pages Router is the supported path.** On App Router nothing is clickable,
-  but not for the reason you might expect: the plugin tags every file's JSX,
-  server components included. What is missing is the click runtime, which is
-  injected into `pages/_app` — a file App Router projects don't have. Until
-  that has another home, the canvas renders an App Router app and no element
-  responds.
+- **Turbopack is fine.** Next.js 16 configures `babel-loader` automatically
+  when it finds a Babel config, so `framelab init` does not take Turbopack
+  away from you — verified on 16.4.0 with Turbopack as the default bundler.
+  Babel runs *in addition to* SWC rather than replacing it. The plugin
+  `init` writes is gated on `NODE_ENV === 'development'`, so nothing Framelab
+  does reaches your production bundle; the Babel pass itself still runs during
+  a production build, which costs build time you can avoid by scoping the
+  config to dev.
+- **Pages Router is the supported path, but App Router is closer than it
+  sounds.** The plugin tags every file's JSX — server components included —
+  and those tags survive into the streamed HTML; verified on Next.js 16.4 with
+  React 19 and an RSC page. What's missing is only the click runtime, which is
+  injected into `pages/_app`, a file App Router projects don't have. So the
+  canvas renders an App Router app and nothing responds to a click. `framelab
+  start` detects exactly this case and says so.
 - Framelab configures Babel, which means Next falls back from SWC to Babel in
   development. Your production build is unaffected.
 - Editing an element inside a reused component edits its **definition**, so the
