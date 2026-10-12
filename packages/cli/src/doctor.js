@@ -23,13 +23,17 @@ const RUNTIME_SENTINEL = '__framelab_click_installed';
 const TAG_ATTR = 'data-framelab-id';
 
 const BODY_LIMIT = 4 * 1024 * 1024;
+// Real apps redirect: auth middleware, locale prefixes, trailing slashes. A
+// probe that stops at the 307 reads an empty body and concludes the app has
+// no tagged elements, which is the opposite of the truth.
+const MAX_REDIRECTS = 5;
 const SCRIPT_LIMIT = 24;
 
 // Framework chunks the runtime is never in. Checked last rather than dropped,
 // since a bundler is free to put anything anywhere.
 const FRAMEWORK_CHUNK = /next[_-]dist|react-dom|react-server|turbopack|polyfill|hmr-client|devtools/i;
 
-function fetchText(url, timeoutMs = 2500) {
+function fetchText(url, timeoutMs = 2500, hops = 0, seen = null) {
   return new Promise((resolve) => {
     let client;
     try {
@@ -38,7 +42,16 @@ function fetchText(url, timeoutMs = 2500) {
     let req;
     try {
       req = client.get(url, { timeout: timeoutMs }, (res) => {
-        if (!res.statusCode || res.statusCode >= 400) {
+        const code = res.statusCode;
+        if (code >= 300 && code < 400 && res.headers.location) {
+          res.resume();
+          if (hops >= MAX_REDIRECTS) return resolve(null);
+          let next;
+          try { next = new URL(res.headers.location, url).href; } catch { return resolve(null); }
+          if (seen) seen.finalUrl = next;
+          return resolve(fetchText(next, timeoutMs, hops + 1, seen));
+        }
+        if (!code || code >= 400) {
           res.resume();
           return resolve(null);
         }
@@ -55,6 +68,17 @@ function fetchText(url, timeoutMs = 2500) {
     req.on('error', () => resolve(null));
     req.on('timeout', () => { req.destroy(); resolve(null); });
   });
+}
+
+/**
+ * Like fetchText, but also reports the URL the response actually came from.
+ * Relative script srcs must resolve against where the page ended up, not
+ * where the request started, or a redirected app's chunks 404.
+ */
+async function fetchPage(url, timeoutMs = 2500, hops = 0) {
+  const seen = { finalUrl: url };
+  const body = await fetchText(url, timeoutMs, hops, seen);
+  return { body, finalUrl: seen.finalUrl };
 }
 
 function scriptUrls(html, appUrl) {
@@ -75,7 +99,7 @@ function scriptUrls(html, appUrl) {
 
 /** Does the served app have tags, and did the click runtime make it into a chunk? */
 async function probeApp(appUrl) {
-  const html = await fetchText(appUrl);
+  const { body: html, finalUrl } = await fetchPage(appUrl);
   if (html == null) return { reachable: false, tagged: false, runtime: false };
 
   const tagged = html.includes(TAG_ATTR);
@@ -85,7 +109,7 @@ async function probeApp(appUrl) {
 
   // Fetched together: a modern dev build serves a dozen or more chunks, and
   // doing this in series would add noticeable latency to every `framelab start`.
-  const bodies = await Promise.all(scriptUrls(html, appUrl).map((u) => fetchText(u)));
+  const bodies = await Promise.all(scriptUrls(html, finalUrl).map((u) => fetchText(u)));
   const runtime = bodies.some((b) => b && b.includes(RUNTIME_SENTINEL));
   return { reachable: true, tagged, runtime };
 }
@@ -214,6 +238,7 @@ function report(diagnosis, t) {
 module.exports = {
   checkApp,
   probeApp,
+  fetchPage,
   diagnose,
   inspectProject,
   report,

@@ -125,6 +125,14 @@ async function main() {
     check('reads .env.local too', doctor.inspectProject(dir).envFile, '.env.local');
   });
 
+  divider('config advice matches the config');
+  // A .ts config cannot use require(); printing CommonJS at someone looking
+  // at an ESM file reads as advice for a different project.
+  const initSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'init.js'), 'utf8');
+  check('init offers an ESM form', initSrc.includes("import { withFramelab } from"), true);
+  check('init offers a CommonJS form', initSrc.includes("const { withFramelab } = require("), true);
+  check('it picks by file extension', /\\.\(ts\|mts\|mjs\)\$/.test(initSrc), true);
+
   withTempProject({ 'src/app/layout.tsx': 'export default function L() {}' }, (dir) => {
     const p = doctor.inspectProject(dir);
     check('spots App Router under src/', p.appRouter, true);
@@ -145,6 +153,30 @@ async function main() {
   check('tagged but inert', await doctor.probeApp(s.url),
     { reachable: true, tagged: true, runtime: false });
   s.server.close();
+
+  // Real apps redirect before they render: auth middleware, locale prefixes,
+  // trailing slashes. Found by pointing the probe at an actual app, where
+  // /dashboard 307'd to /auth/login and the probe reported a fully tagged
+  // page as having nothing to edit.
+  const target = await serve(
+    `<html><body><div${tag}>hi</div><script src="/_app.js"></script></body></html>`,
+    { '/_app.js': `window.${doctor.RUNTIME_SENTINEL} = true;` });
+  const redirector = await new Promise((resolve) => {
+    const srv = http.createServer((req, res) => {
+      if (req.url === '/loop') { res.writeHead(302, { location: '/loop' }); return res.end(); }
+      res.writeHead(307, { location: target.url });
+      res.end();
+    });
+    srv.listen(0, '127.0.0.1', () =>
+      resolve({ server: srv, url: `http://127.0.0.1:${srv.address().port}/` }));
+  });
+  check('a redirect is followed to the real page', await doctor.probeApp(redirector.url),
+    { reachable: true, tagged: true, runtime: true });
+  check('a redirect loop gives up instead of hanging',
+    await doctor.probeApp(redirector.url + 'loop'),
+    { reachable: false, tagged: false, runtime: false });
+  redirector.server.close();
+  target.server.close();
 
   s = await serve('<html><body><div>hi</div></body></html>', {});
   check('nothing tagged at all', await doctor.probeApp(s.url),

@@ -92,11 +92,20 @@ async function init(args) {
       if (body.includes('withFramelab')) {
         t.ok(`${existing} already wraps your config with withFramelab`);
       } else {
+        // Match the file's own module syntax. A .ts or .mjs config cannot use
+        // require(), and printing CommonJS at someone looking at an ESM file
+        // reads as advice for a different project.
+        const esm = /\.(ts|mts|mjs)$/.test(existing) || body.includes('export default');
         t.warn(`${existing} exists — leaving it alone.`);
         t.info('Wrap your exported config so the runtime reaches the browser:');
         console.log();
-        console.log('    ' + t.hl("const { withFramelab } = require('@framelab/babel-plugin/next');"));
-        console.log('    ' + t.hl('module.exports = withFramelab(yourConfig);'));
+        if (esm) {
+          console.log('    ' + t.hl("import { withFramelab } from '@framelab/babel-plugin/next';"));
+          console.log('    ' + t.hl('export default withFramelab(nextConfig);'));
+        } else {
+          console.log('    ' + t.hl("const { withFramelab } = require('@framelab/babel-plugin/next');"));
+          console.log('    ' + t.hl('module.exports = withFramelab(yourConfig);'));
+        }
         console.log();
       }
     }

@@ -4,6 +4,24 @@ All notable changes to Framelab. Versions are released together across the four
 packages, so one entry covers `framelab`, `@framelab/server`,
 `@framelab/babel-plugin` and `@framelab/canvas`.
 
+## Unreleased
+
+Found by running Framelab against a real Next.js + Tailwind v4 + shadcn/ui
+application for the first time, rather than against its own fixtures.
+
+### Fixed
+
+- The startup diagnostic reported a fully tagged app as having nothing to
+  edit, whenever the app redirected. Auth middleware, locale prefixes and
+  trailing-slash normalisation all redirect, so this affected a large share of
+  real projects: the probe treated the 307 as the page, read an empty body,
+  and concluded the Babel plugin had not run. It now follows redirects, gives
+  up on a loop, and resolves script URLs against the page it actually landed
+  on rather than the one it asked for.
+- `framelab init` printed CommonJS wrapping instructions at projects whose
+  `next.config` is TypeScript or ESM, where `require()` is not available. It
+  now matches the file's own module syntax.
+
 ## 0.4.0
 
 ### App Router
