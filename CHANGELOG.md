@@ -4,7 +4,7 @@ All notable changes to Framelab. Versions are released together across the four
 packages, so one entry covers `framelab`, `@framelab/server`,
 `@framelab/babel-plugin` and `@framelab/canvas`.
 
-## 0.3.0
+## 0.4.0
 
 ### App Router
 
@@ -35,6 +35,34 @@ wrappers in any order, and it is inert outside development.
   in a `node_modules_<hash>` chunk — it was preferring chunks whose names
   contain "client", which on Next.js 16 matches several framework chunks and
   not the one that matters. It now checks every script, in parallel.
+
+### Saying what it does
+
+The pitch described implementations rather than consequences. Nobody asks for
+a "byte-clean diff"; people ask to see a change before keeping it, and for a
+spacing nudge to land as `p-gutter` instead of a pixel value. Both already
+worked. The README and the site now lead with those, and say plainly that
+clicking a swatch is a deterministic edit with no model in the loop.
+
+### Fixed
+
+- Turbopack works, and 0.3.0's notes said it didn't. Next.js 16 configures
+  `babel-loader` automatically when it finds a Babel config and runs Babel
+  alongside SWC rather than instead of it, so `framelab init` does not cost
+  you Turbopack. The claim that it did described Next.js 15.
+
+### Internal
+
+- A browser suite drives the canvas against a Tailwind v4 project
+  (`npm run test:v4 --workspace @framelab/canvas`). Everything about v4 was
+  covered at the unit level; nothing proved the resolved tokens reached the
+  inspector.
+- Element ids are derived from each node's own position, so the two transform
+  passes the App Router performs over a shared module agree — verified on
+  Next.js 16.4, and pinned with tests. A per-file counter would have diverged
+  and selected the wrong element after hydration.
+
+## 0.3.0
 
 ### Tailwind v4
 
@@ -82,23 +110,14 @@ the plugin, an unset `NEXT_PUBLIC_FRAMELAB`, or an App Router project with no
 
 ### Docs
 
-- Turbopack works, and an earlier draft of these notes said it didn't. Next.js
-  16 configures `babel-loader` automatically when it finds a Babel config and
-  runs Babel alongside SWC rather than instead of it, so `framelab init` does
-  not cost you Turbopack. The claim that it did described Next.js 15.
-- Element ids are derived from each node's own position in the file, so the
-  two transform passes the App Router performs over a shared module agree. A
-  per-file counter would not have, and the canvas would have selected the
-  wrong element after hydration.
+- Corrected why App Router elements aren't clickable. Server components are
+  not skipped by the plugin — every file's JSX is tagged; what's missing is a
+  `pages/_app` for the click runtime.
 
 ### Internal
 
 - `examples/test-next-app-v4` is a Tailwind v4 fixture app, and the CLI package
   has a test suite for the first time.
-- A browser suite now drives the canvas against a Tailwind v4 project
-  (`npm run test:v4 --workspace @framelab/canvas`). Everything about v4 was
-  covered at the unit level; nothing proved the resolved tokens reached the
-  inspector.
 
 ## 0.2.0
 
